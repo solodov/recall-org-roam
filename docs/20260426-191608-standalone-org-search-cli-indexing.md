@@ -4,7 +4,7 @@ title: Standalone org-search CLI indexing ID-based Org entries with file-granula
 status: implementing
 created: 2026-04-26
 updated: 2026-04-26
-currentPhase: 1
+currentPhase: 2
 externalRef: 
 origin: 
 ---
@@ -19,7 +19,7 @@ The control flow stays simple: the Justfile prepares generated code and build ou
 
 ## Phases
 
-- [ ] 1. Establish a repo-level Justfile build and generation surface
+- [x] 1. Establish a repo-level Justfile build and generation surface
 - [ ] 2. Define a simple txtpb config boundary backed by a proto schema
 - [ ] 3. Keep Cobra as a thin command boundary around application operations
 - [ ] 4. Define corpus discovery around reachable .org files and canonical identity

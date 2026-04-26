@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package orgsearch.config;
+
+option go_package = "org-search/internal/gen/configpb;configpb";
+
+// Config stores org-search's non-secret operator configuration.
+message Config {
+  // notes_root is the absolute or home-relative directory scanned for Org files.
+  optional string notes_root = 1;
+  // index_directory is the absolute or home-relative directory where
+  // org-search stores its disposable search index cache.
+  optional string index_directory = 2;
+}
