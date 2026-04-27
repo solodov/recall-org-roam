@@ -4,7 +4,7 @@ title: org-bleve-index save-time Bleve sync with quiet updates and actionable di
 status: implementing
 created: 2026-04-27
 updated: 2026-04-27
-currentPhase: 3
+currentPhase: 4
 externalRef: 
 origin: 
 ---
@@ -21,7 +21,7 @@ The Emacs side should remain intentionally thin. `org-bleve-index` installs the 
 
 - [x] 1. Establish an editor-safe update-file --json contract in org-search
 - [x] 2. Introduce org-bleve-index as a maintenance-only Emacs package
-- [ ] 3. Use broad save-hook coverage with asynchronous per-file process management
+- [x] 3. Use broad save-hook coverage with asynchronous per-file process management
 - [ ] 4. Surface failures as diagnostics while keeping success and skips quiet
 - [ ] 5. Document v1 lifecycle limits and preserve a clean future extension seam
 

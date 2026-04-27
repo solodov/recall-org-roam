@@ -64,7 +64,7 @@ location."
   :group 'org-bleve-index)
 
 (defcustom org-bleve-index-diagnostics-buffer "*org-bleve-index*"
-  "Buffer used to collect raw process output for failed org-search commands."
+  "Buffer used to collect diagnostics for failed org-search commands."
   :type 'string
   :group 'org-bleve-index)
 
@@ -93,12 +93,12 @@ When enabled, Org buffers install a buffer-local `after-save-hook' that calls
 (defun org-bleve-index-open-diagnostics ()
   "Display the diagnostics buffer used for failed org-search commands."
   (interactive)
-  (pop-to-buffer (get-buffer-create org-bleve-index-diagnostics-buffer)))
+  (pop-to-buffer (org-bleve-index--diagnostics-buffer)))
 
 (defun org-bleve-index-update-buffer (&optional silent-success)
   "Update the external index for the current file-backed Org buffer.
 
-With SILENT-SUCCESS non-nil, suppress the success minibuffer message. When an
+With SILENT-SUCCESS non-nil, suppress any success minibuffer message. When an
 update for the same file is already running, queue one rerun instead of starting
 another concurrent process."
   (interactive)
@@ -157,8 +157,6 @@ With SILENT-SUCCESS non-nil, suppress the success minibuffer message."
     (puthash path
              (list :silent-success pending-silent-success)
              org-bleve-index--pending-update-requests)
-    (unless pending-silent-success
-      (message "org-bleve-index: queued update-file for %s" path))
     'queued))
 
 (defun org-bleve-index--drain-pending-update (path)
@@ -169,27 +167,51 @@ With SILENT-SUCCESS non-nil, suppress the success minibuffer message."
      (plist-get pending-request :silent-success))))
 
 (defun org-bleve-index--start-update-process (path silent-success)
-  (let ((process (org-bleve-index--start-command "update-file" (list path) silent-success)))
+  (when-let ((process (org-bleve-index--start-command "update-file" (list path) silent-success)))
     (process-put process 'org-bleve-index-file-path path)
     (puthash path process org-bleve-index--inflight-update-processes)
     process))
 
 (defun org-bleve-index--start-command (subcommand arguments silent-success)
   (let* ((args (org-bleve-index--command-args subcommand arguments))
-         (process-buffer (generate-new-buffer (format " *org-bleve-index-%s*" subcommand)))
-         (process (apply #'start-process
-                         (format "org-bleve-index-%s" subcommand)
-                         process-buffer
-                         org-bleve-index-command
-                         args)))
-    (process-put process 'org-bleve-index-subcommand subcommand)
-    (process-put process 'org-bleve-index-args args)
-    (process-put process 'org-bleve-index-silent-success silent-success)
-    (set-process-query-on-exit-flag process nil)
-    (set-process-sentinel process #'org-bleve-index--process-sentinel)
-    (unless silent-success
-      (message "org-bleve-index: started %s" subcommand))
-    process))
+         (process-buffer (generate-new-buffer (format " *org-bleve-index-%s*" subcommand))))
+    (condition-case err
+        (let ((process (apply #'start-process
+                              (format "org-bleve-index-%s" subcommand)
+                              process-buffer
+                              (org-bleve-index--resolve-command)
+                              args)))
+          (process-put process 'org-bleve-index-subcommand subcommand)
+          (process-put process 'org-bleve-index-args args)
+          (process-put process 'org-bleve-index-silent-success silent-success)
+          (set-process-query-on-exit-flag process nil)
+          (set-process-sentinel process #'org-bleve-index--process-sentinel)
+          process)
+      (error
+       (when (buffer-live-p process-buffer)
+         (kill-buffer process-buffer))
+       (org-bleve-index--record-start-error subcommand args err)
+       (message "org-bleve-index: failed to start %s; see %s"
+                subcommand
+                org-bleve-index-diagnostics-buffer)
+       nil))))
+
+(defun org-bleve-index--resolve-command ()
+  (let ((command org-bleve-index-command))
+    (cond
+     ((file-name-directory command)
+      (unless (file-executable-p command)
+        (signal 'file-missing
+                (list (format "Searching for program: %s" command)
+                      "No such file or directory"
+                      command)))
+      command)
+     ((executable-find command))
+     (t
+      (signal 'file-missing
+              (list (format "Searching for program: %s" command)
+                    "No such file or directory"
+                    command))))))
 
 (defun org-bleve-index--command-args (subcommand arguments)
   (append (list "--json")
@@ -200,42 +222,174 @@ With SILENT-SUCCESS non-nil, suppress the success minibuffer message."
 
 (defun org-bleve-index--process-sentinel (process _event)
   (when (memq (process-status process) '(exit signal))
-    (let ((subcommand (process-get process 'org-bleve-index-subcommand))
-          (silent-success (process-get process 'org-bleve-index-silent-success))
-          (path (process-get process 'org-bleve-index-file-path))
-          (success (and (eq (process-status process) 'exit)
-                        (zerop (process-exit-status process)))))
+    (let ((path (process-get process 'org-bleve-index-file-path)))
       (unwind-protect
-          (progn
-            (if success
-                (unless silent-success
-                  (message "org-bleve-index: %s finished" subcommand))
-              (org-bleve-index--record-failure process)
-              (message "org-bleve-index: %s failed; see %s"
-                       subcommand
-                       org-bleve-index-diagnostics-buffer))
-            (when path
-              (when (eq (gethash path org-bleve-index--inflight-update-processes) process)
-                (remhash path org-bleve-index--inflight-update-processes))
-              (org-bleve-index--drain-pending-update path)))
+          (if (and (eq (process-status process) 'exit)
+                   (zerop (process-exit-status process)))
+              (org-bleve-index--handle-success process)
+            (org-bleve-index--handle-failure process))
+        (when path
+          (when (eq (gethash path org-bleve-index--inflight-update-processes) process)
+            (remhash path org-bleve-index--inflight-update-processes))
+          (org-bleve-index--drain-pending-update path))
         (when-let ((buffer (process-buffer process)))
           (when (buffer-live-p buffer)
             (kill-buffer buffer)))))))
 
-(defun org-bleve-index--record-failure (process)
-  (let ((output (org-bleve-index--process-output process))
-        (command-line (string-join
-                       (cons org-bleve-index-command
-                             (process-get process 'org-bleve-index-args))
-                       " ")))
-    (with-current-buffer (get-buffer-create org-bleve-index-diagnostics-buffer)
+(defun org-bleve-index--handle-success (process)
+  (condition-case err
+      (let ((payload (org-bleve-index--parse-json-output (org-bleve-index--process-output process))))
+        (org-bleve-index--report-success process payload))
+    (error
+     (org-bleve-index--record-malformed-response process err)
+     (message "org-bleve-index: malformed JSON from %s; see %s"
+              (process-get process 'org-bleve-index-subcommand)
+              org-bleve-index-diagnostics-buffer))))
+
+(defun org-bleve-index--report-success (process payload)
+  (let ((subcommand (process-get process 'org-bleve-index-subcommand))
+        (silent-success (process-get process 'org-bleve-index-silent-success)))
+    (when (org-bleve-index--should-message-success-p subcommand payload silent-success)
+      (message "%s" (org-bleve-index--success-message subcommand payload)))))
+
+(defun org-bleve-index--should-message-success-p (subcommand payload silent-success)
+  (cond
+   (silent-success nil)
+   ((equal subcommand "update-file") nil)
+   ((equal subcommand "rebuild") t)
+   ((org-bleve-index--update-skip-p payload) nil)
+   (t nil)))
+
+(defun org-bleve-index--success-message (subcommand payload)
+  (cond
+   ((equal subcommand "rebuild")
+    (format "org-bleve-index: rebuild finished (%s files, %s entries)"
+            (or (org-bleve-index--json-get payload "indexed_file_count") 0)
+            (or (org-bleve-index--json-get payload "indexed_entry_count") 0)))
+   ((equal subcommand "update-file")
+    (format "org-bleve-index: updated %s"
+            (or (org-bleve-index--json-get payload "path") "file")))
+   (t
+    (format "org-bleve-index: %s finished" subcommand))))
+
+(defun org-bleve-index--update-skip-p (payload)
+  (equal (org-bleve-index--json-get payload "status") "skipped"))
+
+(defun org-bleve-index--handle-failure (process)
+  (condition-case err
+      (let* ((output (org-bleve-index--process-output process))
+             (payload (org-bleve-index--parse-json-output output)))
+        (org-bleve-index--record-json-failure process payload output)
+        (message "org-bleve-index: %s; see %s"
+                 (org-bleve-index--failure-summary process payload)
+                 org-bleve-index-diagnostics-buffer))
+    (error
+     (org-bleve-index--record-malformed-response process err)
+     (message "org-bleve-index: malformed JSON from %s; see %s"
+              (process-get process 'org-bleve-index-subcommand)
+              org-bleve-index-diagnostics-buffer))))
+
+(defun org-bleve-index--failure-summary (process payload)
+  (if (org-bleve-index--json-get payload "duplicates")
+      "duplicate Org IDs"
+    (format "%s failed" (process-get process 'org-bleve-index-subcommand))))
+
+(defun org-bleve-index--record-json-failure (process payload raw-output)
+  (let* ((subcommand (process-get process 'org-bleve-index-subcommand))
+         (args (process-get process 'org-bleve-index-args))
+         (command-line (org-bleve-index--command-line args)))
+    (if-let ((duplicates (org-bleve-index--json-get payload "duplicates")))
+        (org-bleve-index--append-diagnostic-entry
+         (format "%s: duplicate Org IDs" subcommand)
+         command-line
+         (append (list (format "Summary: %s"
+                               (or (org-bleve-index--json-get payload "error")
+                                   "found duplicate Org IDs"))
+                       "Duplicates:")
+                 (org-bleve-index--duplicate-diagnostic-lines duplicates))
+         raw-output)
+      (org-bleve-index--append-diagnostic-entry
+       (format "%s: command failed" subcommand)
+       command-line
+       (list (format "Error: %s"
+                     (or (org-bleve-index--json-get payload "error")
+                         "unknown org-search error")))
+       raw-output))))
+
+(defun org-bleve-index--duplicate-diagnostic-lines (duplicates)
+  (let (lines)
+    (dolist (duplicate duplicates)
+      (setq lines
+            (append lines
+                    (list (format "- %s"
+                                  (or (org-bleve-index--json-get duplicate "id")
+                                      "<unknown-id>")))))
+      (dolist (occurrence (or (org-bleve-index--json-get duplicate "occurrences") '()))
+        (let ((path (or (org-bleve-index--json-get occurrence "path") "<unknown-path>"))
+              (headline (org-bleve-index--json-get occurrence "headline")))
+          (setq lines
+                (append lines
+                        (list (if (and headline (not (string-empty-p headline)))
+                                  (format "  - %s: %s" path headline)
+                                (format "  - %s" path))))))))
+    lines))
+
+(defun org-bleve-index--record-start-error (subcommand args err)
+  (org-bleve-index--append-diagnostic-entry
+   (format "%s: failed to start" subcommand)
+   (org-bleve-index--command-line args)
+   (list (format "Error: %s" (error-message-string err)))))
+
+(defun org-bleve-index--record-malformed-response (process err)
+  (let ((subcommand (process-get process 'org-bleve-index-subcommand))
+        (args (process-get process 'org-bleve-index-args))
+        (output (org-bleve-index--process-output process)))
+    (org-bleve-index--append-diagnostic-entry
+     (format "%s: malformed JSON response" subcommand)
+     (org-bleve-index--command-line args)
+     (list (format "Error: %s" (error-message-string err)))
+     output)))
+
+(defun org-bleve-index--append-diagnostic-entry (title command-line lines &optional raw-output)
+  (with-current-buffer (org-bleve-index--diagnostics-buffer)
+    (let ((inhibit-read-only t))
       (goto-char (point-max))
       (unless (bobp)
         (insert "\n"))
-      (insert (format "$ %s\n" command-line))
-      (insert output)
-      (unless (string-suffix-p "\n" output)
-        (insert "\n")))))
+      (insert (format-time-string "[%Y-%m-%d %H:%M:%S] "))
+      (insert title "\n")
+      (insert (format "Command: %s\n" command-line))
+      (dolist (line lines)
+        (insert line "\n"))
+      (when raw-output
+        (insert "Raw output:\n")
+        (insert raw-output)
+        (unless (string-suffix-p "\n" raw-output)
+          (insert "\n"))))))
+
+(defun org-bleve-index--diagnostics-buffer ()
+  (let ((buffer (get-buffer-create org-bleve-index-diagnostics-buffer)))
+    (with-current-buffer buffer
+      (unless (derived-mode-p 'special-mode)
+        (special-mode)))
+    buffer))
+
+(defun org-bleve-index--command-line (args)
+  (string-join (cons org-bleve-index-command args) " "))
+
+(defun org-bleve-index--parse-json-output (output)
+  (let ((trimmed (string-trim output)))
+    (when (string-empty-p trimmed)
+      (error "empty JSON response"))
+    (json-parse-string trimmed
+                       :object-type 'hash-table
+                       :array-type 'list
+                       :null-object nil
+                       :false-object nil)))
+
+(defun org-bleve-index--json-get (object key)
+  (and object
+       (gethash key object)))
 
 (defun org-bleve-index--process-output (process)
   (if-let ((buffer (process-buffer process)))
