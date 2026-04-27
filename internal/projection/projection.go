@@ -18,6 +18,7 @@ type EntryDocument struct {
 	ID       string
 	Path     string
 	Headline string
+	Todo     string
 	Body     string
 }
 
@@ -121,6 +122,7 @@ func collectSectionDocuments(section *goorg.Section, path string, projected *[]E
 				ID:       trimmedID,
 				Path:     path,
 				Headline: strings.TrimSpace(goorg.String(section.Headline.Title...)),
+				Todo:     strings.TrimSpace(section.Headline.Status),
 				Body:     strings.TrimSpace(goorg.String(filterDirectBodyNodes(section.Headline.Children)...)),
 			})
 		}

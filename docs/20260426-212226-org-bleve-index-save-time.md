@@ -1,10 +1,10 @@
 ---
 id: 20260426-212226-org-bleve-index-save-time
 title: org-bleve-index save-time Bleve sync with quiet updates and actionable diagnostics
-status: implementing
+status: done
 created: 2026-04-27
 updated: 2026-04-27
-currentPhase: 5
+currentPhase: 
 externalRef: 
 origin: 
 ---
@@ -23,7 +23,7 @@ The Emacs side should remain intentionally thin. `org-bleve-index` installs the 
 - [x] 2. Introduce org-bleve-index as a maintenance-only Emacs package
 - [x] 3. Use broad save-hook coverage with asynchronous per-file process management
 - [x] 4. Surface failures as diagnostics while keeping success and skips quiet
-- [ ] 5. Document v1 lifecycle limits and preserve a clean future extension seam
+- [x] 5. Document v1 lifecycle limits and preserve a clean future extension seam
 
 ## Phase Details
 

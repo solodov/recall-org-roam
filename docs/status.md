@@ -18,9 +18,9 @@ This file tracks plans managed in the markdown-backed layout.
 
 ### [20260426-212226-org-bleve-index-save-time](./20260426-212226-org-bleve-index-save-time.md)
 - title: org-bleve-index save-time Bleve sync with quiet updates and actionable diagnostics
-- status: implementing
-- currentPhase: 5
-- currentPhaseTitle: Document v1 lifecycle limits and preserve a clean future extension seam
+- status: done
+- currentPhase: none
+- currentPhaseTitle: none
 - nextPhase: none
 - nextPhaseTitle: none
 - totalPhases: 5

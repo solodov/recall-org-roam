@@ -160,8 +160,8 @@ func TestSearchPassesThroughBleveQueryStringSemantics(t *testing.T) {
 	firstPath := writeIndexFile(t, filepath.Join(t.TempDir(), "first.org"))
 	secondPath := writeIndexFile(t, filepath.Join(t.TempDir(), "second.org"))
 	if err := Rebuild(indexDir, []projection.EntryDocument{
-		{ID: "alpha-id", Path: firstPath, Headline: "Alpha Headline", Body: "alpha bravo"},
-		{ID: "beta-id", Path: secondPath, Headline: "Beta Headline", Body: "alpha"},
+		{ID: "alpha-id", Path: firstPath, Headline: "Alpha Headline", Todo: "TODO", Body: "alpha bravo"},
+		{ID: "beta-id", Path: secondPath, Headline: "Beta Headline", Todo: "DONE", Body: "alpha"},
 	}); err != nil {
 		t.Fatalf("rebuild index: %v", err)
 	}
@@ -172,6 +172,22 @@ func TestSearchPassesThroughBleveQueryStringSemantics(t *testing.T) {
 	}
 	if len(hits) != 1 || hits[0].ID != "alpha-id" {
 		t.Fatalf("hits = %+v, want alpha-id only", hits)
+	}
+
+	hits, err = Search(indexDir, "+todo:TODO +alpha")
+	if err != nil {
+		t.Fatalf("search todo query string: %v", err)
+	}
+	if len(hits) != 1 || hits[0].ID != "alpha-id" {
+		t.Fatalf("todo hits = %+v, want alpha-id only", hits)
+	}
+
+	hits, err = Search(indexDir, "+todo:DONE +bravo")
+	if err != nil {
+		t.Fatalf("search todo exact query string: %v", err)
+	}
+	if len(hits) != 0 {
+		t.Fatalf("todo hits = %+v, want none", hits)
 	}
 }
 

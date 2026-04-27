@@ -12,13 +12,13 @@ func TestProjectFileProjectsOnlyEntriesWithIDAndExcludesDescendantSubtrees(t *te
 	t.Helper()
 
 	orgPath := filepath.Join(t.TempDir(), "notes.org")
-	writeOrgFile(t, orgPath, `* Parent
+	writeOrgFile(t, orgPath, `* TODO Parent
 :PROPERTIES:
 :ID: parent-id
 :END:
 Parent body.
 
-** Child
+** DONE Child
 :PROPERTIES:
 :ID: child-id
 :END:
@@ -43,6 +43,9 @@ Ignored body.
 	if got, want := parent.Headline, "Parent"; got != want {
 		t.Fatalf("parent headline = %q, want %q", got, want)
 	}
+	if got, want := parent.Todo, "TODO"; got != want {
+		t.Fatalf("parent todo = %q, want %q", got, want)
+	}
 	if !strings.Contains(parent.Body, "Parent body.") {
 		t.Fatalf("parent body = %q, want parent body text", parent.Body)
 	}
@@ -56,6 +59,9 @@ Ignored body.
 	}
 	if got, want := child.Headline, "Child"; got != want {
 		t.Fatalf("child headline = %q, want %q", got, want)
+	}
+	if got, want := child.Todo, "DONE"; got != want {
+		t.Fatalf("child todo = %q, want %q", got, want)
 	}
 	if got, want := child.Body, "Child body."; got != want {
 		t.Fatalf("child body = %q, want %q", got, want)

@@ -137,6 +137,7 @@ func indexDocuments(index bleve.Index, documents []projection.EntryDocument) err
 			ID:       document.ID,
 			Path:     document.Path,
 			Headline: document.Headline,
+			Todo:     document.Todo,
 			Body:     document.Body,
 		}); err != nil {
 			return fmt.Errorf("index document %q: %w", document.ID, err)
@@ -335,12 +336,17 @@ func newIndexMapping() *mapping.IndexMappingImpl {
 	headlineFieldMapping := bleve.NewTextFieldMapping()
 	headlineFieldMapping.Store = true
 
+	todoFieldMapping := bleve.NewKeywordFieldMapping()
+	todoFieldMapping.Store = true
+	todoFieldMapping.IncludeInAll = false
+
 	bodyFieldMapping := bleve.NewTextFieldMapping()
 	bodyFieldMapping.Store = false
 
 	indexMapping.DefaultMapping.AddFieldMappingsAt("id", idFieldMapping)
 	indexMapping.DefaultMapping.AddFieldMappingsAt("path", pathFieldMapping)
 	indexMapping.DefaultMapping.AddFieldMappingsAt("headline", headlineFieldMapping)
+	indexMapping.DefaultMapping.AddFieldMappingsAt("todo", todoFieldMapping)
 	indexMapping.DefaultMapping.AddFieldMappingsAt("body", bodyFieldMapping)
 	return indexMapping
 }
@@ -349,5 +355,6 @@ type indexedDocument struct {
 	ID       string `json:"id"`
 	Path     string `json:"path"`
 	Headline string `json:"headline"`
+	Todo     string `json:"todo"`
 	Body     string `json:"body"`
 }
