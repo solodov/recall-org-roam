@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"encoding/json"
 	"io"
 	"strings"
 
@@ -11,24 +10,25 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Run executes the org-search Cobra command tree and renders command results as JSON.
+// Run executes the org-search Cobra command tree and renders command results in human-readable or JSON form.
 func Run(ctx context.Context, args []string, stdout io.Writer, stderr io.Writer, service app.Service) int {
 	if service == nil {
 		service = app.NewService()
 	}
 
-	command := newRootCommand(stdout, service)
+	options := renderOptions{}
+	command := newRootCommand(stdout, &options, service)
 	command.SetOut(stdout)
 	command.SetErr(stderr)
 	command.SetArgs(args)
 	if err := command.ExecuteContext(ctx); err != nil {
-		writeJSONError(stderr, err)
+		writeError(stderr, err, options.jsonOutput)
 		return 1
 	}
 	return 0
 }
 
-func newRootCommand(stdout io.Writer, service app.Service) *cobra.Command {
+func newRootCommand(stdout io.Writer, options *renderOptions, service app.Service) *cobra.Command {
 	var configPath string
 
 	command := &cobra.Command{
@@ -41,15 +41,16 @@ func newRootCommand(stdout io.Writer, service app.Service) *cobra.Command {
 		},
 	}
 	command.PersistentFlags().StringVar(&configPath, "config", "", "Path to the config txtpb file. Empty uses the default XDG config path.")
+	command.PersistentFlags().BoolVar(&options.jsonOutput, "json", false, "Render command output as JSON for automation.")
 	command.AddCommand(
-		newRebuildCommand(stdout, service, &configPath),
-		newUpdateFileCommand(stdout, service, &configPath),
-		newSearchCommand(stdout, service, &configPath),
+		newRebuildCommand(stdout, options, service, &configPath),
+		newUpdateFileCommand(stdout, options, service, &configPath),
+		newSearchCommand(stdout, options, service, &configPath),
 	)
 	return command
 }
 
-func newRebuildCommand(stdout io.Writer, service app.Service, configPath *string) *cobra.Command {
+func newRebuildCommand(stdout io.Writer, options *renderOptions, service app.Service, configPath *string) *cobra.Command {
 	return &cobra.Command{
 		Use:   "rebuild",
 		Short: "Rebuild the full Org search index",
@@ -59,12 +60,12 @@ func newRebuildCommand(stdout io.Writer, service app.Service, configPath *string
 			if err != nil {
 				return err
 			}
-			return writeJSON(stdout, result)
+			return writeResult(stdout, result, options.jsonOutput)
 		},
 	}
 }
 
-func newUpdateFileCommand(stdout io.Writer, service app.Service, configPath *string) *cobra.Command {
+func newUpdateFileCommand(stdout io.Writer, options *renderOptions, service app.Service, configPath *string) *cobra.Command {
 	return &cobra.Command{
 		Use:   "update-file PATH",
 		Short: "Replace one indexed Org file by canonical path",
@@ -74,12 +75,12 @@ func newUpdateFileCommand(stdout io.Writer, service app.Service, configPath *str
 			if err != nil {
 				return err
 			}
-			return writeJSON(stdout, result)
+			return writeResult(stdout, result, options.jsonOutput)
 		},
 	}
 }
 
-func newSearchCommand(stdout io.Writer, service app.Service, configPath *string) *cobra.Command {
+func newSearchCommand(stdout io.Writer, options *renderOptions, service app.Service, configPath *string) *cobra.Command {
 	return &cobra.Command{
 		Use:   "search QUERY",
 		Short: "Run one Bleve query against indexed Org entries",
@@ -89,17 +90,11 @@ func newSearchCommand(stdout io.Writer, service app.Service, configPath *string)
 			if err != nil {
 				return err
 			}
-			return writeJSON(stdout, result)
+			return writeResult(stdout, result, options.jsonOutput)
 		},
 	}
 }
 
-func writeJSON(writer io.Writer, value any) error {
-	encoder := json.NewEncoder(writer)
-	encoder.SetEscapeHTML(false)
-	return encoder.Encode(value)
-}
-
-func writeJSONError(writer io.Writer, err error) {
-	_ = writeJSON(writer, map[string]string{"error": err.Error()})
+type renderOptions struct {
+	jsonOutput bool
 }

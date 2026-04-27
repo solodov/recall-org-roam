@@ -9,10 +9,6 @@ import (
 	"org-search/internal/app"
 )
 
-type response struct {
-	Status string `json:"status"`
-}
-
 type fakeService struct {
 	rebuildRequest    app.RebuildRequest
 	updateFileRequest app.UpdateFileRequest
@@ -42,10 +38,14 @@ func (service *fakeService) Search(_ context.Context, request app.SearchRequest)
 	return service.searchResponse, service.searchError
 }
 
-func TestRunDispatchesRebuildCommand(t *testing.T) {
+func TestRunDispatchesRebuildCommandWithHumanOutput(t *testing.T) {
 	t.Helper()
 
-	service := &fakeService{rebuildResponse: response{Status: "ok"}}
+	service := &fakeService{rebuildResponse: app.RebuildResponse{
+		IndexedFileCount:  2,
+		IndexedEntryCount: 3,
+		Warnings:          []app.Warning{{Path: "/notes/broken.org", Message: "broken symlink"}},
+	}}
 	var stdout strings.Builder
 	var stderr strings.Builder
 
@@ -53,7 +53,7 @@ func TestRunDispatchesRebuildCommand(t *testing.T) {
 	if exitCode != 0 {
 		t.Fatalf("exitCode = %d, want 0", exitCode)
 	}
-	if got, want := stdout.String(), "{\"status\":\"ok\"}\n"; got != want {
+	if got, want := stdout.String(), "Rebuilt index\nIndexed files: 2\nIndexed entries: 3\nWarnings:\n- /notes/broken.org: broken symlink\n"; got != want {
 		t.Fatalf("stdout = %q, want %q", got, want)
 	}
 	if stderr.Len() != 0 {
@@ -64,16 +64,42 @@ func TestRunDispatchesRebuildCommand(t *testing.T) {
 	}
 }
 
-func TestRunDispatchesUpdateFileCommand(t *testing.T) {
+func TestRunDispatchesRebuildCommandWithJSONOutput(t *testing.T) {
 	t.Helper()
 
-	service := &fakeService{updateFileResponse: response{Status: "updated"}}
+	service := &fakeService{rebuildResponse: app.RebuildResponse{IndexedFileCount: 1, IndexedEntryCount: 2}}
+	var stdout strings.Builder
+	var stderr strings.Builder
+
+	exitCode := Run(context.Background(), []string{"--json", "rebuild"}, &stdout, &stderr, service)
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0", exitCode)
+	}
+	if got, want := stdout.String(), "{\"indexed_file_count\":1,\"indexed_entry_count\":2}\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q, want empty", stderr.String())
+	}
+}
+
+func TestRunDispatchesUpdateFileCommandWithHumanOutput(t *testing.T) {
+	t.Helper()
+
+	service := &fakeService{updateFileResponse: app.UpdateFileResponse{
+		Path:              "/notes/file.org",
+		DeletedEntryCount: 1,
+		IndexedEntryCount: 2,
+	}}
 	var stdout strings.Builder
 	var stderr strings.Builder
 
 	exitCode := Run(context.Background(), []string{"update-file", "/notes/file.org", "--config", "/tmp/config.txtpb"}, &stdout, &stderr, service)
 	if exitCode != 0 {
 		t.Fatalf("exitCode = %d, want 0", exitCode)
+	}
+	if got, want := stdout.String(), "Updated file index\nPath: /notes/file.org\nDeleted entries: 1\nIndexed entries: 2\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
 	}
 	if got, want := service.updateFileRequest.Path, "/notes/file.org"; got != want {
 		t.Fatalf("path = %q, want %q", got, want)
@@ -83,10 +109,10 @@ func TestRunDispatchesUpdateFileCommand(t *testing.T) {
 	}
 }
 
-func TestRunDispatchesSearchCommandWithJoinedQuery(t *testing.T) {
+func TestRunDispatchesSearchCommandWithJoinedQueryAndHumanOutput(t *testing.T) {
 	t.Helper()
 
-	service := &fakeService{searchResponse: response{Status: "searched"}}
+	service := &fakeService{searchResponse: app.SearchResponse{Hits: []app.SearchHit{{ID: "alpha-id", Headline: "Alpha Headline"}, {ID: "beta-id", Headline: "Beta Headline"}}}}
 	var stdout strings.Builder
 	var stderr strings.Builder
 
@@ -97,12 +123,34 @@ func TestRunDispatchesSearchCommandWithJoinedQuery(t *testing.T) {
 	if got, want := service.searchRequest.Query, "headline:foo body:bar"; got != want {
 		t.Fatalf("query = %q, want %q", got, want)
 	}
+	if got, want := stdout.String(), "2 matches\n1. alpha-id: Alpha Headline\n2. beta-id: Beta Headline\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
 	if stderr.Len() != 0 {
 		t.Fatalf("stderr = %q, want empty", stderr.String())
 	}
 }
 
-func TestRunRendersErrorsAsJSON(t *testing.T) {
+func TestRunRendersNoMatchesHumanReadable(t *testing.T) {
+	t.Helper()
+
+	service := &fakeService{searchResponse: app.SearchResponse{}}
+	var stdout strings.Builder
+	var stderr strings.Builder
+
+	exitCode := Run(context.Background(), []string{"search", "nothing"}, &stdout, &stderr, service)
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0", exitCode)
+	}
+	if got, want := stdout.String(), "No matches\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q, want empty", stderr.String())
+	}
+}
+
+func TestRunRendersErrorsAsHumanReadableByDefault(t *testing.T) {
 	t.Helper()
 
 	service := &fakeService{rebuildError: errors.New("boom")}
@@ -110,6 +158,25 @@ func TestRunRendersErrorsAsJSON(t *testing.T) {
 	var stderr strings.Builder
 
 	exitCode := Run(context.Background(), []string{"rebuild"}, &stdout, &stderr, service)
+	if exitCode != 1 {
+		t.Fatalf("exitCode = %d, want 1", exitCode)
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty", stdout.String())
+	}
+	if got, want := stderr.String(), "Error: boom\n"; got != want {
+		t.Fatalf("stderr = %q, want %q", got, want)
+	}
+}
+
+func TestRunRendersErrorsAsJSONWithFlag(t *testing.T) {
+	t.Helper()
+
+	service := &fakeService{rebuildError: errors.New("boom")}
+	var stdout strings.Builder
+	var stderr strings.Builder
+
+	exitCode := Run(context.Background(), []string{"--json", "rebuild"}, &stdout, &stderr, service)
 	if exitCode != 1 {
 		t.Fatalf("exitCode = %d, want 1", exitCode)
 	}

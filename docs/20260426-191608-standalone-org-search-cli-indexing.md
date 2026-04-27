@@ -1,10 +1,10 @@
 ---
 id: 20260426-191608-standalone-org-search-cli-indexing
 title: Standalone org-search CLI indexing ID-based Org entries with file-granular Bleve search
-status: implementing
+status: done
 created: 2026-04-26
 updated: 2026-04-27
-currentPhase: 6
+currentPhase: 
 externalRef: 
 origin: 
 ---
@@ -24,7 +24,7 @@ The control flow stays simple: the Justfile prepares generated code and build ou
 - [x] 3. Keep Cobra as a thin command boundary around application operations
 - [x] 4. Define corpus discovery around reachable .org files and canonical identity
 - [x] 5. Wrap go-org behind a projection layer that defines the indexed entry model
-- [ ] 6. Keep Bleve maintenance file-granular and treat the index as disposable cache state
+- [x] 6. Keep Bleve maintenance file-granular and treat the index as disposable cache state
 
 ## Phase Details
 

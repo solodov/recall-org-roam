@@ -101,3 +101,13 @@ test *paths: generate-proto
 [script]
 run *args: build
     exec "dist/{{binary}}" "$@"
+
+[script]
+install: build
+    target_dir="$(go env GOBIN)"
+    if [[ -z "$target_dir" ]]; then
+      target_dir="$(go env GOPATH)/bin"
+    fi
+
+    mkdir -p "$target_dir"
+    cp "dist/{{binary}}" "$target_dir/{{binary}}"
