@@ -104,6 +104,71 @@ Body.
 	}
 }
 
+func TestProjectFileInheritsCategoryFromFileKeywordAndEntryProperties(t *testing.T) {
+	t.Helper()
+
+	orgPath := filepath.Join(t.TempDir(), "category.org")
+	writeOrgFile(t, orgPath, `#+CATEGORY: file-category
+* Parent without ID
+:PROPERTIES:
+:CATEGORY: parent-category
+:END:
+Body.
+
+** Child with inherited parent category
+:PROPERTIES:
+:ID: child-id
+:END:
+Body.
+
+* Sibling with file category
+:PROPERTIES:
+:ID: sibling-id
+:END:
+Body.
+`)
+
+	documents, err := ProjectFile(orgPath)
+	if err != nil {
+		t.Fatalf("project file: %v", err)
+	}
+	if len(documents) != 2 {
+		t.Fatalf("documents = %+v, want 2 projected entries", documents)
+	}
+	if got, want := documents[0].Category, "parent-category"; got != want {
+		t.Fatalf("child category = %q, want %q", got, want)
+	}
+	if got, want := documents[1].Category, "file-category"; got != want {
+		t.Fatalf("sibling category = %q, want %q", got, want)
+	}
+}
+
+func TestProjectFileReadsFileCategoryFromTopPropertyDrawer(t *testing.T) {
+	t.Helper()
+
+	orgPath := filepath.Join(t.TempDir(), "file-property-category.org")
+	writeOrgFile(t, orgPath, `:PROPERTIES:
+:CATEGORY: file-property-category
+:END:
+* Entry
+:PROPERTIES:
+:ID: entry-id
+:END:
+Body.
+`)
+
+	documents, err := ProjectFile(orgPath)
+	if err != nil {
+		t.Fatalf("project file: %v", err)
+	}
+	if len(documents) != 1 {
+		t.Fatalf("documents = %+v, want 1 projected entry", documents)
+	}
+	if got, want := documents[0].Category, "file-property-category"; got != want {
+		t.Fatalf("category = %q, want %q", got, want)
+	}
+}
+
 func TestProjectFileIndexesScheduledAndDeadlinePlanningMetadata(t *testing.T) {
 	t.Helper()
 
@@ -125,6 +190,9 @@ Body.
 	}
 	if !documents[0].IsDone {
 		t.Fatal("IsDone = false, want true")
+	}
+	if documents[0].Category != "" {
+		t.Fatalf("category = %q, want empty", documents[0].Category)
 	}
 	if got, want := documents[0].ScheduledDate, "2026-04-28"; got != want {
 		t.Fatalf("scheduledDate = %q, want %q", got, want)

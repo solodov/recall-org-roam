@@ -25,6 +25,7 @@ type EntryDocument struct {
 	Headline             string
 	Todo                 string
 	IsDone               bool
+	Category             string
 	ScheduledDate        string
 	ScheduledMinuteOfDay *int
 	DeadlineDate         string
@@ -120,19 +121,24 @@ func projectCanonicalFile(canonicalPath string, visiblePath string) ([]EntryDocu
 	projected := make([]EntryDocument, 0)
 	todoKeywords := collectTodoKeywords(todoKeywordSetting(document))
 	doneKeywords := collectDoneKeywords(todoKeywordSetting(document))
+	fileCategory := fileCategory(document)
 	for _, section := range document.Outline.Children {
-		collectSectionDocuments(section, visiblePath, canonicalPath, todoKeywords, doneKeywords, &projected)
+		collectSectionDocuments(section, visiblePath, canonicalPath, fileCategory, todoKeywords, doneKeywords, &projected)
 	}
 	return projected, nil
 }
 
-func collectSectionDocuments(section *goorg.Section, visiblePath string, canonicalPath string, todoKeywords []string, doneKeywords map[string]struct{}, projected *[]EntryDocument) {
+func collectSectionDocuments(section *goorg.Section, visiblePath string, canonicalPath string, inheritedCategory string, todoKeywords []string, doneKeywords map[string]struct{}, projected *[]EntryDocument) {
 	if section == nil || section.Headline == nil {
 		return
 	}
 
 	directBodyNodes := filterDirectBodyNodes(section.Headline.Children)
 	properties, directBodyNodes := extractSectionProperties(section.Headline.Properties, directBodyNodes)
+	category := inheritedCategory
+	if propertyCategory, ok := properties.Get("CATEGORY"); ok && strings.TrimSpace(propertyCategory) != "" {
+		category = strings.TrimSpace(propertyCategory)
+	}
 	planning := extractPlanningMetadata(directBodyNodes)
 	status, headline := projectedHeadlineMetadata(section.Headline, todoKeywords)
 	if id, ok := properties.Get("ID"); ok {
@@ -145,6 +151,7 @@ func collectSectionDocuments(section *goorg.Section, visiblePath string, canonic
 				Headline:             headline,
 				Todo:                 status,
 				IsDone:               isDoneStatus(status, doneKeywords),
+				Category:             category,
 				ScheduledDate:        planning.scheduledDate,
 				ScheduledMinuteOfDay: planning.scheduledMinuteOfDay,
 				DeadlineDate:         planning.deadlineDate,
@@ -155,8 +162,25 @@ func collectSectionDocuments(section *goorg.Section, visiblePath string, canonic
 	}
 
 	for _, child := range section.Children {
-		collectSectionDocuments(child, visiblePath, canonicalPath, todoKeywords, doneKeywords, projected)
+		collectSectionDocuments(child, visiblePath, canonicalPath, category, todoKeywords, doneKeywords, projected)
 	}
+}
+
+func fileCategory(document *goorg.Document) string {
+	if value := bufferSetting(document, "CATEGORY"); value != "" {
+		return value
+	}
+	for _, node := range document.Nodes {
+		switch node := node.(type) {
+		case goorg.Headline:
+			return ""
+		case goorg.PropertyDrawer:
+			if value, ok := node.Get("CATEGORY"); ok && strings.TrimSpace(value) != "" {
+				return strings.TrimSpace(value)
+			}
+		}
+	}
+	return ""
 }
 
 func projectedHeadlineMetadata(headline *goorg.Headline, todoKeywords []string) (string, string) {
@@ -189,13 +213,25 @@ func stripPriorityPrefix(headline string) string {
 }
 
 func todoKeywordSetting(document *goorg.Document) string {
-	if value := strings.TrimSpace(document.BufferSettings["TODO"]); value != "" {
-		return value
-	}
-	if value := strings.TrimSpace(document.BufferSettings["todo"]); value != "" {
+	if value := bufferSetting(document, "TODO"); value != "" {
 		return value
 	}
 	return document.Get("TODO")
+}
+
+func bufferSetting(document *goorg.Document, key string) string {
+	if value := strings.TrimSpace(document.BufferSettings[key]); value != "" {
+		return value
+	}
+	lowercaseKey := strings.ToLower(key)
+	if value := strings.TrimSpace(document.BufferSettings[lowercaseKey]); value != "" {
+		return value
+	}
+	uppercaseKey := strings.ToUpper(key)
+	if value := strings.TrimSpace(document.BufferSettings[uppercaseKey]); value != "" {
+		return value
+	}
+	return ""
 }
 
 func collectTodoKeywords(raw string) []string {

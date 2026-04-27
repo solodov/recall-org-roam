@@ -168,6 +168,7 @@ func TestRebuildStoresScheduledAndDeadlinePlanningFields(t *testing.T) {
 		ID:                   "planned-id",
 		Path:                 plannedPath,
 		Headline:             "Planned",
+		Category:             "work",
 		ScheduledDate:        "2026-04-28",
 		ScheduledMinuteOfDay: &scheduledMinuteOfDay,
 		DeadlineDate:         "2026-04-29",
@@ -191,7 +192,10 @@ func TestRebuildStoresScheduledAndDeadlinePlanningFields(t *testing.T) {
 		_ = index.Close()
 	}()
 
-	plannedFields := storedFieldsForDocumentID(t, index, "planned-id", []string{"scheduled_date", "scheduled_minute_of_day", "deadline_date", "deadline_minute_of_day"})
+	plannedFields := storedFieldsForDocumentID(t, index, "planned-id", []string{"category", "scheduled_date", "scheduled_minute_of_day", "deadline_date", "deadline_minute_of_day"})
+	if got, want := plannedFields["category"], "work"; got != want {
+		t.Fatalf("category = %#v, want %#v", got, want)
+	}
 	if got, want := plannedFields["scheduled_date"], "2026-04-28"; got != want {
 		t.Fatalf("scheduled_date = %#v, want %#v", got, want)
 	}
@@ -267,8 +271,8 @@ func TestSearchPassesThroughBleveQueryStringSemantics(t *testing.T) {
 	firstPath := writeIndexFile(t, filepath.Join(t.TempDir(), "first.org"))
 	secondPath := writeIndexFile(t, filepath.Join(t.TempDir(), "second.org"))
 	if err := Rebuild(indexDir, []projection.EntryDocument{
-		{ID: "alpha-id", Path: firstPath, Headline: "Alpha Headline", Todo: "TODO", Body: "alpha bravo"},
-		{ID: "beta-id", Path: secondPath, Headline: "Beta Headline", Todo: "DONE", Body: "alpha"},
+		{ID: "alpha-id", Path: firstPath, Headline: "Alpha Headline", Todo: "TODO", Category: "work", Body: "alpha bravo"},
+		{ID: "beta-id", Path: secondPath, Headline: "Beta Headline", Todo: "DONE", Category: "home", Body: "alpha"},
 	}); err != nil {
 		t.Fatalf("rebuild index: %v", err)
 	}
@@ -295,6 +299,14 @@ func TestSearchPassesThroughBleveQueryStringSemantics(t *testing.T) {
 	}
 	if len(hits) != 0 {
 		t.Fatalf("todo hits = %+v, want none", hits)
+	}
+
+	hits, err = Search(indexDir, "+category:work +alpha")
+	if err != nil {
+		t.Fatalf("search category exact query string: %v", err)
+	}
+	if len(hits) != 1 || hits[0].ID != "alpha-id" {
+		t.Fatalf("category hits = %+v, want alpha-id only", hits)
 	}
 }
 
