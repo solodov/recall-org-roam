@@ -78,7 +78,7 @@ func UpdateFile(indexDirectory string, path string, documents []projection.Entry
 		return UpdateResult{}, err
 	}
 
-	deletedEntryCount, err := deleteDocumentsByPath(index, path)
+	deletedEntryCount, err := deleteDocumentsByCanonicalPath(index, path)
 	if err != nil {
 		return UpdateResult{}, err
 	}
@@ -134,12 +134,17 @@ func indexDocuments(index bleve.Index, documents []projection.EntryDocument) err
 		if document.Path == "" {
 			return fmt.Errorf("index document %q requires path", document.ID)
 		}
+		canonicalPath := document.CanonicalPath
+		if canonicalPath == "" {
+			canonicalPath = document.Path
+		}
 		if err := batch.Index(document.ID, indexedDocument{
-			ID:       document.ID,
-			Path:     document.Path,
-			Headline: document.Headline,
-			Todo:     document.Todo,
-			Body:     document.Body,
+			ID:            document.ID,
+			Path:          document.Path,
+			CanonicalPath: canonicalPath,
+			Headline:      document.Headline,
+			Todo:          document.Todo,
+			Body:          document.Body,
 		}); err != nil {
 			return fmt.Errorf("index document %q: %w", document.ID, err)
 		}
@@ -154,7 +159,7 @@ func indexDocuments(index bleve.Index, documents []projection.EntryDocument) err
 }
 
 func cleanupMissingPaths(index bleve.Index, skippedPath string) error {
-	paths, err := collectIndexedPaths(index)
+	paths, err := collectIndexedCanonicalPaths(index)
 	if err != nil {
 		return err
 	}
@@ -167,7 +172,7 @@ func cleanupMissingPaths(index bleve.Index, skippedPath string) error {
 		} else if !os.IsNotExist(err) {
 			return fmt.Errorf("stat indexed path %q: %w", path, err)
 		}
-		if _, err := deleteDocumentsByPath(index, path); err != nil {
+		if _, err := deleteDocumentsByCanonicalPath(index, path); err != nil {
 			return err
 		}
 	}
@@ -184,10 +189,10 @@ func rejectConflictingIDs(index bleve.Index, targetPath string, documents []proj
 
 		conflicts := make([]projection.DuplicateIDOccurrence, 0, len(occurrences)+1)
 		for _, occurrence := range occurrences {
-			if occurrence.Path == targetPath {
+			if occurrence.CanonicalPath == targetPath {
 				continue
 			}
-			conflicts = append(conflicts, occurrence)
+			conflicts = append(conflicts, projection.DuplicateIDOccurrence{Path: occurrence.Path, Headline: occurrence.Headline})
 		}
 		if len(conflicts) == 0 {
 			continue
@@ -201,8 +206,8 @@ func rejectConflictingIDs(index bleve.Index, targetPath string, documents []proj
 	return nil
 }
 
-func collectIndexedPaths(index bleve.Index) ([]string, error) {
-	results, err := collectStoredFields(index, bleve.NewMatchAllQuery(), []string{"path"})
+func collectIndexedCanonicalPaths(index bleve.Index) ([]string, error) {
+	results, err := collectStoredFields(index, bleve.NewMatchAllQuery(), []string{"canonical_path", "path"})
 	if err != nil {
 		return nil, fmt.Errorf("list indexed paths: %w", err)
 	}
@@ -210,7 +215,7 @@ func collectIndexedPaths(index bleve.Index) ([]string, error) {
 	uniquePaths := make(map[string]struct{}, len(results))
 	paths := make([]string, 0, len(results))
 	for _, fields := range results {
-		path, _ := fields["path"].(string)
+		path := canonicalPathFromFields(fields)
 		if path == "" {
 			continue
 		}
@@ -223,10 +228,8 @@ func collectIndexedPaths(index bleve.Index) ([]string, error) {
 	return paths, nil
 }
 
-func deleteDocumentsByPath(index bleve.Index, path string) (int, error) {
-	query := bleve.NewTermQuery(path)
-	query.SetField("path")
-	ids, err := collectDocumentIDs(index, query)
+func deleteDocumentsByCanonicalPath(index bleve.Index, path string) (int, error) {
+	ids, err := collectDocumentIDs(index, canonicalPathQuery(path))
 	if err != nil {
 		return 0, fmt.Errorf("find indexed documents for %q: %w", path, err)
 	}
@@ -244,13 +247,19 @@ func deleteDocumentsByPath(index bleve.Index, path string) (int, error) {
 	return len(ids), nil
 }
 
-func collectIndexedOccurrencesByID(index bleve.Index, id string) ([]projection.DuplicateIDOccurrence, error) {
+type indexedOccurrence struct {
+	Path          string
+	CanonicalPath string
+	Headline      string
+}
+
+func collectIndexedOccurrencesByID(index bleve.Index, id string) ([]indexedOccurrence, error) {
 	query := bleve.NewTermQuery(id)
 	query.SetField("id")
-	occurrences := make([]projection.DuplicateIDOccurrence, 0)
+	occurrences := make([]indexedOccurrence, 0)
 	for from := 0; ; from += pageSize {
 		request := bleve.NewSearchRequestOptions(query, pageSize, from, false)
-		request.Fields = []string{"path", "headline"}
+		request.Fields = []string{"path", "canonical_path", "headline"}
 		result, err := index.Search(request)
 		if err != nil {
 			return nil, err
@@ -258,12 +267,29 @@ func collectIndexedOccurrencesByID(index bleve.Index, id string) ([]projection.D
 		for _, hit := range result.Hits {
 			path, _ := hit.Fields["path"].(string)
 			headline, _ := hit.Fields["headline"].(string)
-			occurrences = append(occurrences, projection.DuplicateIDOccurrence{Path: path, Headline: headline})
+			occurrences = append(occurrences, indexedOccurrence{Path: path, CanonicalPath: canonicalPathFromFields(hit.Fields), Headline: headline})
 		}
 		if len(result.Hits) < pageSize {
 			return occurrences, nil
 		}
 	}
+}
+
+func canonicalPathQuery(path string) query.Query {
+	canonicalPathQuery := bleve.NewTermQuery(path)
+	canonicalPathQuery.SetField("canonical_path")
+	legacyPathQuery := bleve.NewTermQuery(path)
+	legacyPathQuery.SetField("path")
+	return bleve.NewDisjunctionQuery(canonicalPathQuery, legacyPathQuery)
+}
+
+func canonicalPathFromFields(fields map[string]interface{}) string {
+	canonicalPath, _ := fields["canonical_path"].(string)
+	if canonicalPath != "" {
+		return canonicalPath
+	}
+	path, _ := fields["path"].(string)
+	return path
 }
 
 func collectDocumentIDs(index bleve.Index, query query.Query) ([]string, error) {
@@ -335,6 +361,10 @@ func newIndexMapping() *mapping.IndexMappingImpl {
 	pathFieldMapping.Store = true
 	pathFieldMapping.IncludeInAll = false
 
+	canonicalPathFieldMapping := bleve.NewKeywordFieldMapping()
+	canonicalPathFieldMapping.Store = true
+	canonicalPathFieldMapping.IncludeInAll = false
+
 	headlineFieldMapping := bleve.NewTextFieldMapping()
 	headlineFieldMapping.Store = true
 
@@ -347,6 +377,7 @@ func newIndexMapping() *mapping.IndexMappingImpl {
 
 	indexMapping.DefaultMapping.AddFieldMappingsAt("id", idFieldMapping)
 	indexMapping.DefaultMapping.AddFieldMappingsAt("path", pathFieldMapping)
+	indexMapping.DefaultMapping.AddFieldMappingsAt("canonical_path", canonicalPathFieldMapping)
 	indexMapping.DefaultMapping.AddFieldMappingsAt("headline", headlineFieldMapping)
 	indexMapping.DefaultMapping.AddFieldMappingsAt("todo", todoFieldMapping)
 	indexMapping.DefaultMapping.AddFieldMappingsAt("body", bodyFieldMapping)
@@ -354,9 +385,10 @@ func newIndexMapping() *mapping.IndexMappingImpl {
 }
 
 type indexedDocument struct {
-	ID       string `json:"id"`
-	Path     string `json:"path"`
-	Headline string `json:"headline"`
-	Todo     string `json:"todo"`
-	Body     string `json:"body"`
+	ID            string `json:"id"`
+	Path          string `json:"path"`
+	CanonicalPath string `json:"canonical_path"`
+	Headline      string `json:"headline"`
+	Todo          string `json:"todo"`
+	Body          string `json:"body"`
 }

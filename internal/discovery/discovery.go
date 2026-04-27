@@ -1,4 +1,4 @@
-// Package discovery resolves reachable Org files into canonical absolute file identities.
+// Package discovery resolves reachable Org files into visible corpus paths plus canonical file identities.
 package discovery
 
 import (
@@ -10,9 +10,16 @@ import (
 	"sort"
 )
 
-// Result stores the canonical Org file paths and non-fatal warnings from one discovery pass.
+// File stores one reachable Org file with its visible corpus path and canonical file identity.
+type File struct {
+	Path          string
+	CanonicalPath string
+}
+
+// Result stores the visible Org file paths, canonical file identities, and non-fatal warnings from one discovery pass.
 type Result struct {
 	Paths    []string
+	Files    []File
 	Warnings []Warning
 }
 
@@ -22,8 +29,12 @@ type Warning struct {
 	Message string
 }
 
-// Discover walks one notes root, follows reachable symlinks, and returns deduplicated canonical Org file paths.
+// Discover walks one notes root, follows reachable symlinks, and returns deduplicated visible Org file paths keyed by canonical identity.
 func Discover(root string) (Result, error) {
+	visibleRoot, err := absolutePath(root)
+	if err != nil {
+		return Result{}, fmt.Errorf("normalize notes root %q: %w", root, err)
+	}
 	canonicalRoot, err := CanonicalizePath(root)
 	if err != nil {
 		return Result{}, fmt.Errorf("canonicalize notes root %q: %w", root, err)
@@ -39,9 +50,9 @@ func Discover(root string) (Result, error) {
 
 	walker := discoveryWalker{
 		seenDirectories: map[string]struct{}{},
-		seenFiles:       map[string]struct{}{},
+		seenFiles:       map[string]File{},
 	}
-	if err := walker.visitDirectory(canonicalRoot, true); err != nil {
+	if err := walker.visitDirectory(visibleRoot, canonicalRoot, true); err != nil {
 		return Result{}, err
 	}
 	return walker.result(), nil
@@ -84,16 +95,26 @@ func CanonicalizePath(path string) (string, error) {
 
 type discoveryWalker struct {
 	seenDirectories map[string]struct{}
-	seenFiles       map[string]struct{}
+	seenFiles       map[string]File
 	warnings        []Warning
 }
 
 func (walker *discoveryWalker) result() Result {
-	paths := make([]string, 0, len(walker.seenFiles))
-	for path := range walker.seenFiles {
-		paths = append(paths, path)
+	files := make([]File, 0, len(walker.seenFiles))
+	for _, file := range walker.seenFiles {
+		files = append(files, file)
 	}
-	sort.Strings(paths)
+	sort.Slice(files, func(left int, right int) bool {
+		if files[left].Path == files[right].Path {
+			return files[left].CanonicalPath < files[right].CanonicalPath
+		}
+		return files[left].Path < files[right].Path
+	})
+
+	paths := make([]string, 0, len(files))
+	for _, file := range files {
+		paths = append(paths, file.Path)
+	}
 
 	warnings := append([]Warning(nil), walker.warnings...)
 	sort.Slice(warnings, func(left int, right int) bool {
@@ -103,85 +124,86 @@ func (walker *discoveryWalker) result() Result {
 		return warnings[left].Path < warnings[right].Path
 	})
 
-	return Result{Paths: paths, Warnings: warnings}
+	return Result{Paths: paths, Files: files, Warnings: warnings}
 }
 
-func (walker *discoveryWalker) visitDirectory(path string, isRoot bool) error {
-	if _, seen := walker.seenDirectories[path]; seen {
+func (walker *discoveryWalker) visitDirectory(visiblePath string, canonicalPath string, isRoot bool) error {
+	canonicalPath = filepath.Clean(canonicalPath)
+	if _, seen := walker.seenDirectories[canonicalPath]; seen {
 		return nil
 	}
-	walker.seenDirectories[path] = struct{}{}
+	walker.seenDirectories[canonicalPath] = struct{}{}
 
-	entries, err := os.ReadDir(path)
+	entries, err := os.ReadDir(canonicalPath)
 	if err != nil {
 		if isRoot {
-			return fmt.Errorf("read notes root %q: %w", path, err)
+			return fmt.Errorf("read notes root %q: %w", visiblePath, err)
 		}
-		walker.addWarning(path, fmt.Sprintf("read directory: %v", err))
+		walker.addWarning(visiblePath, fmt.Sprintf("read directory: %v", err))
 		return nil
 	}
 
 	for _, entry := range entries {
-		walker.visitPath(filepath.Join(path, entry.Name()))
+		walker.visitPath(filepath.Join(visiblePath, entry.Name()), filepath.Join(canonicalPath, entry.Name()))
 	}
 	return nil
 }
 
-func (walker *discoveryWalker) visitPath(path string) {
-	info, err := os.Lstat(path)
+func (walker *discoveryWalker) visitPath(visiblePath string, canonicalPath string) {
+	info, err := os.Lstat(visiblePath)
 	if err != nil {
-		walker.addWarning(path, fmt.Sprintf("inspect path: %v", err))
+		walker.addWarning(visiblePath, fmt.Sprintf("inspect path: %v", err))
 		return
 	}
 
 	if info.Mode()&os.ModeSymlink != 0 {
-		walker.visitSymlink(path)
+		walker.visitSymlink(visiblePath)
 		return
 	}
 	if info.IsDir() {
-		_ = walker.visitDirectory(path, false)
+		_ = walker.visitDirectory(visiblePath, canonicalPath, false)
 		return
 	}
-	walker.visitFile(path)
+	walker.visitFile(visiblePath, canonicalPath)
 }
 
-func (walker *discoveryWalker) visitSymlink(path string) {
-	canonicalPath, err := CanonicalizePath(path)
+func (walker *discoveryWalker) visitSymlink(visiblePath string) {
+	canonicalPath, err := CanonicalizePath(visiblePath)
 	if err != nil {
-		walker.addWarning(path, err.Error())
+		walker.addWarning(visiblePath, err.Error())
 		return
 	}
 
 	info, err := os.Stat(canonicalPath)
 	if err != nil {
-		walker.addWarning(path, fmt.Sprintf("stat resolved path %q: %v", canonicalPath, err))
+		walker.addWarning(visiblePath, fmt.Sprintf("stat resolved path %q: %v", canonicalPath, err))
 		return
 	}
 	if info.IsDir() {
-		_ = walker.visitDirectory(canonicalPath, false)
+		_ = walker.visitDirectory(visiblePath, canonicalPath, false)
 		return
 	}
-	walker.visitFile(canonicalPath)
+	walker.visitFile(visiblePath, canonicalPath)
 }
 
-func (walker *discoveryWalker) visitFile(path string) {
-	if filepath.Ext(path) != ".org" {
+func (walker *discoveryWalker) visitFile(visiblePath string, canonicalPath string) {
+	if filepath.Ext(canonicalPath) != ".org" {
 		return
 	}
 
-	canonicalPath, err := CanonicalizePath(path)
-	if err != nil {
-		walker.addWarning(path, err.Error())
-		return
-	}
-	if _, seen := walker.seenFiles[canonicalPath]; seen {
+	visiblePath = filepath.Clean(visiblePath)
+	canonicalPath = filepath.Clean(canonicalPath)
+	if existing, seen := walker.seenFiles[canonicalPath]; seen {
+		if preferVisiblePath(visiblePath, existing.Path) {
+			walker.seenFiles[canonicalPath] = File{Path: visiblePath, CanonicalPath: canonicalPath}
+		}
 		return
 	}
 	if err := ensureReadableFile(canonicalPath); err != nil {
-		walker.addWarning(canonicalPath, fmt.Sprintf("open file: %v", err))
+		walker.addWarning(visiblePath, fmt.Sprintf("open file: %v", err))
 		return
 	}
-	walker.seenFiles[canonicalPath] = struct{}{}
+	walker.seenFiles[canonicalPath] = File{Path: visiblePath, CanonicalPath: canonicalPath}
 }
 
 func (walker *discoveryWalker) addWarning(path string, message string) {
@@ -194,6 +216,21 @@ func ensureReadableFile(path string) error {
 		return err
 	}
 	return file.Close()
+}
+
+func preferVisiblePath(candidate string, existing string) bool {
+	if len(candidate) != len(existing) {
+		return len(candidate) < len(existing)
+	}
+	return candidate < existing
+}
+
+func absolutePath(path string) (string, error) {
+	absolutePath, err := filepath.Abs(path)
+	if err != nil {
+		return "", fmt.Errorf("make path absolute: %w", err)
+	}
+	return filepath.Clean(absolutePath), nil
 }
 
 func canonicalizeMissingPath(path string) (string, error) {

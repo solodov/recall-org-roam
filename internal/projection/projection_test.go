@@ -68,7 +68,7 @@ Ignored body.
 	}
 }
 
-func TestProjectFileCanonicalizesPathMetadata(t *testing.T) {
+func TestProjectFilePreservesVisiblePathMetadataForSymlinks(t *testing.T) {
 	t.Helper()
 
 	targetDir := t.TempDir()
@@ -93,8 +93,11 @@ Body.
 	if len(documents) != 1 {
 		t.Fatalf("documents = %+v, want 1 projected entry", documents)
 	}
-	if got, want := documents[0].Path, mustCanonicalPath(t, canonicalTargetPath); got != want {
+	if got, want := documents[0].Path, symlinkPath; got != want {
 		t.Fatalf("path = %q, want %q", got, want)
+	}
+	if got, want := documents[0].CanonicalPath, mustCanonicalPath(t, canonicalTargetPath); got != want {
+		t.Fatalf("canonicalPath = %q, want %q", got, want)
 	}
 }
 
@@ -134,8 +137,8 @@ Fourth body.
 
 	duplicates := mustDuplicateIDsError(t, err)
 	assertDuplicateIDs(t, duplicates, []DuplicateID{
-		{ID: "another-id", Occurrences: []DuplicateIDOccurrence{{Path: mustCanonicalPath(t, orgPath), Headline: "Four"}, {Path: mustCanonicalPath(t, orgPath), Headline: "Three"}}},
-		{ID: "shared-id", Occurrences: []DuplicateIDOccurrence{{Path: mustCanonicalPath(t, orgPath), Headline: "One"}, {Path: mustCanonicalPath(t, orgPath), Headline: "Two"}}},
+		{ID: "another-id", Occurrences: []DuplicateIDOccurrence{{Path: orgPath, Headline: "Four"}, {Path: orgPath, Headline: "Three"}}},
+		{ID: "shared-id", Occurrences: []DuplicateIDOccurrence{{Path: orgPath, Headline: "One"}, {Path: orgPath, Headline: "Two"}}},
 	})
 }
 
@@ -177,8 +180,8 @@ Third body.
 
 	duplicates := mustDuplicateIDsError(t, err)
 	assertDuplicateIDs(t, duplicates, []DuplicateID{
-		{ID: "another-id", Occurrences: []DuplicateIDOccurrence{{Path: mustCanonicalPath(t, firstPath), Headline: "Extra One"}, {Path: mustCanonicalPath(t, thirdPath), Headline: "Three"}}},
-		{ID: "shared-id", Occurrences: []DuplicateIDOccurrence{{Path: mustCanonicalPath(t, firstPath), Headline: "One"}, {Path: mustCanonicalPath(t, secondPath), Headline: "Two"}}},
+		{ID: "another-id", Occurrences: []DuplicateIDOccurrence{{Path: firstPath, Headline: "Extra One"}, {Path: thirdPath, Headline: "Three"}}},
+		{ID: "shared-id", Occurrences: []DuplicateIDOccurrence{{Path: firstPath, Headline: "One"}, {Path: secondPath, Headline: "Two"}}},
 	})
 	if !strings.Contains(err.Error(), "another-id") || !strings.Contains(err.Error(), "shared-id") {
 		t.Fatalf("error = %q, want all duplicate IDs in summary", err.Error())

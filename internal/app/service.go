@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"org-search/internal/config"
 	"org-search/internal/discovery"
@@ -212,7 +213,7 @@ func prepareFileUpdate(notesRoot string, path string) (preparedFileUpdate, error
 		return preparedFileUpdate{}, fmt.Errorf("file path %q is a directory", canonicalPath)
 	}
 
-	inCorpus, err := fileInCorpus(notesRoot, canonicalPath)
+	corpusFile, inCorpus, err := findCorpusFile(notesRoot, canonicalPath)
 	if err != nil {
 		return preparedFileUpdate{}, err
 	}
@@ -220,24 +221,24 @@ func prepareFileUpdate(notesRoot string, path string) (preparedFileUpdate, error
 		return preparedFileUpdate{canonicalPath: canonicalPath, skipReason: UpdateFileSkipReasonOutsideCorpus}, nil
 	}
 
-	documents, err := projection.ProjectFile(canonicalPath)
+	documents, err := projection.ProjectFile(corpusFile.Path)
 	if err != nil {
 		return preparedFileUpdate{}, err
 	}
 	return preparedFileUpdate{canonicalPath: canonicalPath, documents: documents}, nil
 }
 
-func fileInCorpus(notesRoot string, canonicalPath string) (bool, error) {
+func findCorpusFile(notesRoot string, canonicalPath string) (discovery.File, bool, error) {
 	result, err := discovery.Discover(notesRoot)
 	if err != nil {
-		return false, err
+		return discovery.File{}, false, err
 	}
-	for _, path := range result.Paths {
-		if path == canonicalPath {
-			return true, nil
+	for _, file := range result.Files {
+		if file.CanonicalPath == canonicalPath {
+			return file, true, nil
 		}
 	}
-	return false, nil
+	return discovery.File{}, false, nil
 }
 
 func searchHitsFromIndex(notesRoot string, hits []searchindex.SearchHit) []SearchHit {
@@ -255,17 +256,12 @@ func relativeSearchHitPath(notesRoot string, path string) string {
 	if path == "" {
 		return ""
 	}
-	canonicalRoot, err := discovery.CanonicalizePath(notesRoot)
+	relativePath, err := filepath.Rel(notesRoot, path)
 	if err != nil {
-		canonicalRoot = notesRoot
+		return path
 	}
-	canonicalPath, err := discovery.CanonicalizePath(path)
-	if err != nil {
-		canonicalPath = path
-	}
-	relativePath, err := filepath.Rel(canonicalRoot, canonicalPath)
-	if err != nil {
-		return canonicalPath
+	if relativePath == ".." || strings.HasPrefix(relativePath, ".."+string(filepath.Separator)) {
+		return path
 	}
 	return filepath.ToSlash(relativePath)
 }

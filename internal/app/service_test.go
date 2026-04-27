@@ -259,6 +259,69 @@ insidebody
 	}
 }
 
+func TestNewServiceSearchKeepsVisibleSymlinkPathsRelativeToNotesRoot(t *testing.T) {
+	t.Helper()
+
+	rootDir := t.TempDir()
+	notesRoot := filepath.Join(rootDir, "notes")
+	indexDirectory := filepath.Join(rootDir, "index")
+	mobileTarget := filepath.Join(rootDir, "mobile-target")
+	canonicalPhotoPath := filepath.Join(mobileTarget, "photo.org")
+	visibleMobilePath := filepath.Join(notesRoot, "mobile")
+	writeOrgFile(t, canonicalPhotoPath, `* Photo
+:PROPERTIES:
+:ID: photo-id
+:END:
+initial-photo-body
+`)
+	if err := os.MkdirAll(notesRoot, 0o755); err != nil {
+		t.Fatalf("create notes root: %v", err)
+	}
+	mustSymlink(t, mobileTarget, visibleMobilePath)
+
+	configPath := filepath.Join(rootDir, "config.txtpb")
+	writeConfigFile(t, configPath, "notes_root: \""+notesRoot+"\"\nindex_directory: \""+indexDirectory+"\"")
+
+	service := NewService()
+	if _, err := service.Rebuild(context.Background(), RebuildRequest{ConfigPath: configPath}); err != nil {
+		t.Fatalf("rebuild index: %v", err)
+	}
+
+	searchResult, err := service.Search(context.Background(), SearchRequest{ConfigPath: configPath, Query: "initial-photo-body"})
+	if err != nil {
+		t.Fatalf("search initial content: %v", err)
+	}
+	searchResponse := searchResult.(SearchResponse)
+	if len(searchResponse.Hits) != 1 || searchResponse.Hits[0].ID != "photo-id" {
+		t.Fatalf("search hits = %+v, want photo-id", searchResponse.Hits)
+	}
+	if got, want := searchResponse.Hits[0].Path, "mobile/photo.org"; got != want {
+		t.Fatalf("search hit path = %q, want %q", got, want)
+	}
+
+	writeOrgFile(t, canonicalPhotoPath, `* Photo
+:PROPERTIES:
+:ID: photo-id
+:END:
+updated-photo-body
+`)
+	if _, err := service.UpdateFile(context.Background(), UpdateFileRequest{ConfigPath: configPath, Path: canonicalPhotoPath}); err != nil {
+		t.Fatalf("update canonical file through visible corpus path: %v", err)
+	}
+
+	searchResult, err = service.Search(context.Background(), SearchRequest{ConfigPath: configPath, Query: "updated-photo-body"})
+	if err != nil {
+		t.Fatalf("search updated content: %v", err)
+	}
+	searchResponse = searchResult.(SearchResponse)
+	if len(searchResponse.Hits) != 1 || searchResponse.Hits[0].ID != "photo-id" {
+		t.Fatalf("updated search hits = %+v, want photo-id", searchResponse.Hits)
+	}
+	if got, want := searchResponse.Hits[0].Path, "mobile/photo.org"; got != want {
+		t.Fatalf("updated search hit path = %q, want %q", got, want)
+	}
+}
+
 func TestNewServiceReturnsRepairGuidanceWhenSearchingMissingIndex(t *testing.T) {
 	t.Helper()
 
@@ -308,6 +371,14 @@ func writeOrgFile(t *testing.T, path string, content string) {
 	}
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatalf("write org file %q: %v", path, err)
+	}
+}
+
+func mustSymlink(t *testing.T, target string, path string) {
+	t.Helper()
+
+	if err := os.Symlink(target, path); err != nil {
+		t.Fatalf("symlink %q -> %q: %v", path, target, err)
 	}
 }
 

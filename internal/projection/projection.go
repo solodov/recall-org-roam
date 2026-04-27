@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -15,11 +16,12 @@ import (
 
 // EntryDocument stores one indexable Org entry projected from a parsed subtree.
 type EntryDocument struct {
-	ID       string
-	Path     string
-	Headline string
-	Todo     string
-	Body     string
+	ID            string
+	Path          string
+	CanonicalPath string
+	Headline      string
+	Todo          string
+	Body          string
 }
 
 // DuplicateIDOccurrence stores one duplicate Org ID occurrence that the operator can inspect and fix.
@@ -66,6 +68,10 @@ func ProjectPaths(paths []string) ([]EntryDocument, error) {
 	seenPaths := make(map[string]struct{}, len(paths))
 	occurrencesByID := make(map[string][]DuplicateIDOccurrence)
 	for _, path := range paths {
+		visiblePath, err := absolutePath(path)
+		if err != nil {
+			return nil, fmt.Errorf("normalize org file %q: %w", path, err)
+		}
 		canonicalPath, err := discovery.CanonicalizePath(path)
 		if err != nil {
 			return nil, fmt.Errorf("canonicalize org file %q: %w", path, err)
@@ -75,7 +81,7 @@ func ProjectPaths(paths []string) ([]EntryDocument, error) {
 		}
 		seenPaths[canonicalPath] = struct{}{}
 
-		fileDocuments, err := projectCanonicalFile(canonicalPath)
+		fileDocuments, err := projectCanonicalFile(canonicalPath, visiblePath)
 		if err != nil {
 			return nil, err
 		}
@@ -92,25 +98,25 @@ func ProjectPaths(paths []string) ([]EntryDocument, error) {
 	return projected, nil
 }
 
-func projectCanonicalFile(path string) ([]EntryDocument, error) {
-	raw, err := os.ReadFile(path)
+func projectCanonicalFile(canonicalPath string, visiblePath string) ([]EntryDocument, error) {
+	raw, err := os.ReadFile(canonicalPath)
 	if err != nil {
-		return nil, fmt.Errorf("read org file %q: %w", path, err)
+		return nil, fmt.Errorf("read org file %q: %w", canonicalPath, err)
 	}
 
-	document := goorg.New().Silent().Parse(bytes.NewReader(raw), path)
+	document := goorg.New().Silent().Parse(bytes.NewReader(raw), canonicalPath)
 	if document.Error != nil {
-		return nil, fmt.Errorf("parse org file %q: %w", path, document.Error)
+		return nil, fmt.Errorf("parse org file %q: %w", canonicalPath, document.Error)
 	}
 
 	projected := make([]EntryDocument, 0)
 	for _, section := range document.Outline.Children {
-		collectSectionDocuments(section, path, &projected)
+		collectSectionDocuments(section, visiblePath, canonicalPath, &projected)
 	}
 	return projected, nil
 }
 
-func collectSectionDocuments(section *goorg.Section, path string, projected *[]EntryDocument) {
+func collectSectionDocuments(section *goorg.Section, visiblePath string, canonicalPath string, projected *[]EntryDocument) {
 	if section == nil || section.Headline == nil {
 		return
 	}
@@ -119,17 +125,18 @@ func collectSectionDocuments(section *goorg.Section, path string, projected *[]E
 		trimmedID := strings.TrimSpace(id)
 		if trimmedID != "" {
 			*projected = append(*projected, EntryDocument{
-				ID:       trimmedID,
-				Path:     path,
-				Headline: strings.TrimSpace(goorg.String(section.Headline.Title...)),
-				Todo:     strings.TrimSpace(section.Headline.Status),
-				Body:     strings.TrimSpace(goorg.String(filterDirectBodyNodes(section.Headline.Children)...)),
+				ID:            trimmedID,
+				Path:          visiblePath,
+				CanonicalPath: canonicalPath,
+				Headline:      strings.TrimSpace(goorg.String(section.Headline.Title...)),
+				Todo:          strings.TrimSpace(section.Headline.Status),
+				Body:          strings.TrimSpace(goorg.String(filterDirectBodyNodes(section.Headline.Children)...)),
 			})
 		}
 	}
 
 	for _, child := range section.Children {
-		collectSectionDocuments(child, path, projected)
+		collectSectionDocuments(child, visiblePath, canonicalPath, projected)
 	}
 }
 
@@ -163,4 +170,12 @@ func collectDuplicateIDs(occurrencesByID map[string][]DuplicateIDOccurrence) []D
 		return duplicates[left].ID < duplicates[right].ID
 	})
 	return duplicates
+}
+
+func absolutePath(path string) (string, error) {
+	absolutePath, err := filepath.Abs(path)
+	if err != nil {
+		return "", fmt.Errorf("make path absolute: %w", err)
+	}
+	return filepath.Clean(absolutePath), nil
 }

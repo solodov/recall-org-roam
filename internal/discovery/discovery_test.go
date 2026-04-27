@@ -14,11 +14,11 @@ func TestDiscoverFollowsReachableSymlinkedDirectoriesAndFilesWithoutDuplicates(t
 	outsideDir := t.TempDir()
 
 	insidePath := writeTestFile(t, filepath.Join(rootDir, "inside.org"))
-	sharedPath := writeTestFile(t, filepath.Join(outsideDir, "shared.org"))
-	outsideOnlyPath := writeTestFile(t, filepath.Join(outsideDir, "outside-only.org"))
+	sharedTargetPath := writeTestFile(t, filepath.Join(outsideDir, "shared.org"))
+	writeTestFile(t, filepath.Join(outsideDir, "outside-only.org"))
 	writeTestFile(t, filepath.Join(outsideDir, "skip.txt"))
 	mustSymlink(t, outsideDir, filepath.Join(rootDir, "outside-link"))
-	mustSymlink(t, sharedPath, filepath.Join(rootDir, "shared-link.org"))
+	mustSymlink(t, sharedTargetPath, filepath.Join(rootDir, "shared-link.org"))
 
 	result, err := Discover(rootDir)
 	if err != nil {
@@ -28,7 +28,16 @@ func TestDiscoverFollowsReachableSymlinkedDirectoriesAndFilesWithoutDuplicates(t
 	if len(result.Warnings) != 0 {
 		t.Fatalf("warnings = %+v, want none", result.Warnings)
 	}
-	assertSamePaths(t, result.Paths, []string{insidePath, outsideOnlyPath, sharedPath})
+	assertSamePaths(t, result.Paths, []string{
+		insidePath,
+		filepath.Join(rootDir, "outside-link", "outside-only.org"),
+		filepath.Join(rootDir, "shared-link.org"),
+	})
+	assertSameFiles(t, result.Files, []File{
+		{Path: insidePath, CanonicalPath: mustCanonicalizePath(t, insidePath)},
+		{Path: filepath.Join(rootDir, "outside-link", "outside-only.org"), CanonicalPath: mustCanonicalizePath(t, filepath.Join(outsideDir, "outside-only.org"))},
+		{Path: filepath.Join(rootDir, "shared-link.org"), CanonicalPath: mustCanonicalizePath(t, sharedTargetPath)},
+	})
 }
 
 func TestDiscoverAvoidsSymlinkLoops(t *testing.T) {
@@ -57,7 +66,6 @@ func TestDiscoverSurfacesBrokenSymlinksAndUnreadableReachablePaths(t *testing.T)
 	t.Helper()
 
 	rootDir := t.TempDir()
-	canonicalRootDir := mustCanonicalizePath(t, rootDir)
 	visiblePath := writeTestFile(t, filepath.Join(rootDir, "visible.org"))
 	mustSymlink(t, filepath.Join(rootDir, "missing.org"), filepath.Join(rootDir, "broken.org"))
 
@@ -90,9 +98,9 @@ func TestDiscoverSurfacesBrokenSymlinksAndUnreadableReachablePaths(t *testing.T)
 	if len(result.Warnings) != 3 {
 		t.Fatalf("warnings = %+v, want 3 warnings", result.Warnings)
 	}
-	assertWarningPathContains(t, result.Warnings, filepath.Join(canonicalRootDir, "broken.org"), "resolve symlinks")
+	assertWarningPathContains(t, result.Warnings, filepath.Join(rootDir, "broken.org"), "resolve symlinks")
 	assertWarningPathContains(t, result.Warnings, unreadableFilePath, "open file")
-	assertWarningPathContains(t, result.Warnings, filepath.Join(canonicalRootDir, "locked"), "read directory")
+	assertWarningPathContains(t, result.Warnings, filepath.Join(rootDir, "locked"), "read directory")
 }
 
 func TestCanonicalizePathResolvesMissingLeafThroughExistingParentSymlinks(t *testing.T) {
@@ -121,7 +129,7 @@ func writeTestFile(t *testing.T, path string) string {
 	if err := os.WriteFile(path, []byte("* heading\n"), 0o600); err != nil {
 		t.Fatalf("write file %q: %v", path, err)
 	}
-	return mustCanonicalizePath(t, path)
+	return filepath.Clean(path)
 }
 
 func mustSymlink(t *testing.T, target string, path string) {
@@ -151,6 +159,19 @@ func assertSamePaths(t *testing.T, got []string, want []string) {
 	for index := range want {
 		if got[index] != want[index] {
 			t.Fatalf("paths = %v, want %v", got, want)
+		}
+	}
+}
+
+func assertSameFiles(t *testing.T, got []File, want []File) {
+	t.Helper()
+
+	if len(got) != len(want) {
+		t.Fatalf("files = %+v, want %+v", got, want)
+	}
+	for index := range want {
+		if got[index] != want[index] {
+			t.Fatalf("files = %+v, want %+v", got, want)
 		}
 	}
 }
