@@ -1,8 +1,14 @@
 package main
 
-import "fmt"
+import (
+	"context"
+	"os"
 
-// main keeps the repo buildable until the Cobra command surface lands.
+	"org-search/internal/app"
+	"org-search/internal/cli"
+)
+
+// main wires the Cobra command surface to the application service.
 func main() {
-	fmt.Println("org-search CLI is not implemented yet")
+	os.Exit(cli.Run(context.Background(), os.Args[1:], os.Stdout, os.Stderr, app.NewService()))
 }

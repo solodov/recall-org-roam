@@ -128,6 +128,50 @@ func TestLoadBytesRejectsRelativeXDGDataHomeForDefaultIndexDirectory(t *testing.
 	}
 }
 
+func TestResolvePathDefaultsToXDGConfigHome(t *testing.T) {
+	t.Helper()
+
+	homeDir := t.TempDir()
+	xdgConfigHome := filepath.Join(homeDir, "xdg-config")
+	t.Setenv("HOME", homeDir)
+	t.Setenv("XDG_CONFIG_HOME", xdgConfigHome)
+
+	resolvedPath, err := ResolvePath("")
+	if err != nil {
+		t.Fatalf("resolve config path: %v", err)
+	}
+
+	if got, want := resolvedPath, filepath.Join(xdgConfigHome, "org-search", defaultConfigFileName); got != want {
+		t.Fatalf("configPath = %q, want %q", got, want)
+	}
+}
+
+func TestResolvePathFallsBackToDotConfig(t *testing.T) {
+	t.Helper()
+
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Setenv("XDG_CONFIG_HOME", "")
+
+	resolvedPath, err := ResolvePath("")
+	if err != nil {
+		t.Fatalf("resolve config path: %v", err)
+	}
+
+	if got, want := resolvedPath, filepath.Join(homeDir, ".config", "org-search", defaultConfigFileName); got != want {
+		t.Fatalf("configPath = %q, want %q", got, want)
+	}
+}
+
+func TestResolvePathRejectsRelativeOverride(t *testing.T) {
+	t.Helper()
+
+	_, err := ResolvePath("config.txtpb")
+	if err == nil || !strings.Contains(err.Error(), "must be absolute after normalization") {
+		t.Fatalf("expected relative config path error, got %v", err)
+	}
+}
+
 func osWriteFile(path string, raw []byte) error {
 	return os.WriteFile(path, raw, 0o600)
 }

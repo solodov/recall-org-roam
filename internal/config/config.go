@@ -11,7 +11,10 @@ import (
 	"google.golang.org/protobuf/encoding/prototext"
 )
 
-const defaultIndexDirectoryName = "index"
+const (
+	defaultConfigFileName     = "config.txtpb"
+	defaultIndexDirectoryName = "index"
+)
 
 // Config stores the normalized org-search runtime configuration.
 type Config struct {
@@ -54,12 +57,21 @@ func LoadBytes(path string, raw []byte) (Config, error) {
 	return Config{NotesRoot: notesRoot, IndexDirectory: indexDirectory}, nil
 }
 
+// ResolvePath normalizes one optional config file path and applies the default XDG location when empty.
+func ResolvePath(path string) (string, error) {
+	trimmed := strings.TrimSpace(path)
+	if trimmed == "" {
+		return defaultConfigPath()
+	}
+	return normalizeAbsolutePath(trimmed)
+}
+
 func normalizeRequiredDirectoryPath(field string, raw string) (string, error) {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
 		return "", fmt.Errorf("%s is required", field)
 	}
-	return normalizeDirectoryPath(trimmed)
+	return normalizeAbsolutePath(trimmed)
 }
 
 func normalizeOptionalDirectoryPath(raw string) (string, error) {
@@ -67,10 +79,10 @@ func normalizeOptionalDirectoryPath(raw string) (string, error) {
 	if trimmed == "" {
 		return "", nil
 	}
-	return normalizeDirectoryPath(trimmed)
+	return normalizeAbsolutePath(trimmed)
 }
 
-func normalizeDirectoryPath(raw string) (string, error) {
+func normalizeAbsolutePath(raw string) (string, error) {
 	expanded, err := expandHomeDirectory(raw)
 	if err != nil {
 		return "", err
@@ -102,10 +114,27 @@ func expandHomeDirectory(path string) (string, error) {
 	return path, nil
 }
 
+func defaultConfigPath() (string, error) {
+	configHome := strings.TrimSpace(os.Getenv("XDG_CONFIG_HOME"))
+	if configHome != "" {
+		normalized, err := normalizeAbsolutePath(configHome)
+		if err != nil {
+			return "", fmt.Errorf("XDG_CONFIG_HOME: %w", err)
+		}
+		return filepath.Join(normalized, "org-search", defaultConfigFileName), nil
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve home directory: %w", err)
+	}
+	return filepath.Join(home, ".config", "org-search", defaultConfigFileName), nil
+}
+
 func defaultIndexDirectory() (string, error) {
 	dataHome := strings.TrimSpace(os.Getenv("XDG_DATA_HOME"))
 	if dataHome != "" {
-		normalized, err := normalizeDirectoryPath(dataHome)
+		normalized, err := normalizeAbsolutePath(dataHome)
 		if err != nil {
 			return "", fmt.Errorf("XDG_DATA_HOME: %w", err)
 		}
