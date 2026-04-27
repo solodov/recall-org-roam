@@ -138,14 +138,28 @@ func indexDocuments(index bleve.Index, documents []projection.EntryDocument) err
 		if canonicalPath == "" {
 			canonicalPath = document.Path
 		}
-		if err := batch.Index(document.ID, indexedDocument{
-			ID:            document.ID,
-			Path:          document.Path,
-			CanonicalPath: canonicalPath,
-			Headline:      document.Headline,
-			Todo:          document.Todo,
-			Body:          document.Body,
-		}); err != nil {
+
+		indexDocument := map[string]any{
+			"id":             document.ID,
+			"path":           document.Path,
+			"canonical_path": canonicalPath,
+			"headline":       document.Headline,
+			"todo":           document.Todo,
+			"body":           document.Body,
+		}
+		if document.ScheduledDate != "" {
+			indexDocument["scheduled_date"] = document.ScheduledDate
+		}
+		if document.ScheduledMinuteOfDay != nil {
+			indexDocument["scheduled_minute_of_day"] = *document.ScheduledMinuteOfDay
+		}
+		if document.DeadlineDate != "" {
+			indexDocument["deadline_date"] = document.DeadlineDate
+		}
+		if document.DeadlineMinuteOfDay != nil {
+			indexDocument["deadline_minute_of_day"] = *document.DeadlineMinuteOfDay
+		}
+		if err := batch.Index(document.ID, indexDocument); err != nil {
 			return fmt.Errorf("index document %q: %w", document.ID, err)
 		}
 	}
@@ -372,6 +386,22 @@ func newIndexMapping() *mapping.IndexMappingImpl {
 	todoFieldMapping.Store = true
 	todoFieldMapping.IncludeInAll = false
 
+	scheduledDateFieldMapping := bleve.NewKeywordFieldMapping()
+	scheduledDateFieldMapping.Store = true
+	scheduledDateFieldMapping.IncludeInAll = false
+
+	scheduledMinuteOfDayFieldMapping := bleve.NewNumericFieldMapping()
+	scheduledMinuteOfDayFieldMapping.Store = true
+	scheduledMinuteOfDayFieldMapping.IncludeInAll = false
+
+	deadlineDateFieldMapping := bleve.NewKeywordFieldMapping()
+	deadlineDateFieldMapping.Store = true
+	deadlineDateFieldMapping.IncludeInAll = false
+
+	deadlineMinuteOfDayFieldMapping := bleve.NewNumericFieldMapping()
+	deadlineMinuteOfDayFieldMapping.Store = true
+	deadlineMinuteOfDayFieldMapping.IncludeInAll = false
+
 	bodyFieldMapping := bleve.NewTextFieldMapping()
 	bodyFieldMapping.Store = false
 
@@ -380,15 +410,10 @@ func newIndexMapping() *mapping.IndexMappingImpl {
 	indexMapping.DefaultMapping.AddFieldMappingsAt("canonical_path", canonicalPathFieldMapping)
 	indexMapping.DefaultMapping.AddFieldMappingsAt("headline", headlineFieldMapping)
 	indexMapping.DefaultMapping.AddFieldMappingsAt("todo", todoFieldMapping)
+	indexMapping.DefaultMapping.AddFieldMappingsAt("scheduled_date", scheduledDateFieldMapping)
+	indexMapping.DefaultMapping.AddFieldMappingsAt("scheduled_minute_of_day", scheduledMinuteOfDayFieldMapping)
+	indexMapping.DefaultMapping.AddFieldMappingsAt("deadline_date", deadlineDateFieldMapping)
+	indexMapping.DefaultMapping.AddFieldMappingsAt("deadline_minute_of_day", deadlineMinuteOfDayFieldMapping)
 	indexMapping.DefaultMapping.AddFieldMappingsAt("body", bodyFieldMapping)
 	return indexMapping
-}
-
-type indexedDocument struct {
-	ID            string `json:"id"`
-	Path          string `json:"path"`
-	CanonicalPath string `json:"canonical_path"`
-	Headline      string `json:"headline"`
-	Todo          string `json:"todo"`
-	Body          string `json:"body"`
 }

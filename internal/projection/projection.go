@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	goorg "github.com/niklasfasching/go-org/org"
@@ -16,12 +18,16 @@ import (
 
 // EntryDocument stores one indexable Org entry projected from a parsed subtree.
 type EntryDocument struct {
-	ID            string
-	Path          string
-	CanonicalPath string
-	Headline      string
-	Todo          string
-	Body          string
+	ID                   string
+	Path                 string
+	CanonicalPath        string
+	Headline             string
+	Todo                 string
+	ScheduledDate        string
+	ScheduledMinuteOfDay *int
+	DeadlineDate         string
+	DeadlineMinuteOfDay  *int
+	Body                 string
 }
 
 // DuplicateIDOccurrence stores one duplicate Org ID occurrence that the operator can inspect and fix.
@@ -121,16 +127,22 @@ func collectSectionDocuments(section *goorg.Section, visiblePath string, canonic
 		return
 	}
 
+	directBodyNodes := filterDirectBodyNodes(section.Headline.Children)
+	planning := extractPlanningMetadata(directBodyNodes)
 	if id, ok := section.Headline.Properties.Get("ID"); ok {
 		trimmedID := strings.TrimSpace(id)
 		if trimmedID != "" {
 			*projected = append(*projected, EntryDocument{
-				ID:            trimmedID,
-				Path:          visiblePath,
-				CanonicalPath: canonicalPath,
-				Headline:      strings.TrimSpace(goorg.String(section.Headline.Title...)),
-				Todo:          strings.TrimSpace(section.Headline.Status),
-				Body:          strings.TrimSpace(goorg.String(filterDirectBodyNodes(section.Headline.Children)...)),
+				ID:                   trimmedID,
+				Path:                 visiblePath,
+				CanonicalPath:        canonicalPath,
+				Headline:             strings.TrimSpace(goorg.String(section.Headline.Title...)),
+				Todo:                 strings.TrimSpace(section.Headline.Status),
+				ScheduledDate:        planning.scheduledDate,
+				ScheduledMinuteOfDay: planning.scheduledMinuteOfDay,
+				DeadlineDate:         planning.deadlineDate,
+				DeadlineMinuteOfDay:  planning.deadlineMinuteOfDay,
+				Body:                 strings.TrimSpace(goorg.String(directBodyNodes...)),
 			})
 		}
 	}
@@ -139,6 +151,71 @@ func collectSectionDocuments(section *goorg.Section, visiblePath string, canonic
 		collectSectionDocuments(child, visiblePath, canonicalPath, projected)
 	}
 }
+
+func extractPlanningMetadata(nodes []goorg.Node) planningMetadata {
+	if len(nodes) == 0 {
+		return planningMetadata{}
+	}
+	firstParagraph, ok := nodes[0].(goorg.Paragraph)
+	if !ok {
+		return planningMetadata{}
+	}
+
+	metadata := planningMetadata{}
+	for _, line := range strings.Split(goorg.String(firstParagraph.Children...), "\n") {
+		trimmedLine := strings.TrimSpace(line)
+		if trimmedLine == "" {
+			continue
+		}
+		matches := planningLineRegexp.FindAllStringSubmatch(trimmedLine, -1)
+		remainder := planningLineRegexp.ReplaceAllString(trimmedLine, "")
+		remainder = closedPlanningLineRegexp.ReplaceAllString(remainder, "")
+		if len(matches) == 0 || strings.TrimSpace(remainder) != "" {
+			break
+		}
+		for _, match := range matches {
+			date := match[2]
+			minuteOfDay := planningMinuteOfDay(match[3], match[4])
+			switch match[1] {
+			case "SCHEDULED":
+				metadata.scheduledDate = date
+				metadata.scheduledMinuteOfDay = minuteOfDay
+			case "DEADLINE":
+				metadata.deadlineDate = date
+				metadata.deadlineMinuteOfDay = minuteOfDay
+			}
+		}
+	}
+	return metadata
+}
+
+func planningMinuteOfDay(hourText string, minuteText string) *int {
+	if hourText == "" || minuteText == "" {
+		return nil
+	}
+	hour, err := strconv.Atoi(hourText)
+	if err != nil {
+		return nil
+	}
+	minute, err := strconv.Atoi(minuteText)
+	if err != nil {
+		return nil
+	}
+	minuteOfDay := hour*60 + minute
+	return &minuteOfDay
+}
+
+type planningMetadata struct {
+	scheduledDate        string
+	scheduledMinuteOfDay *int
+	deadlineDate         string
+	deadlineMinuteOfDay  *int
+}
+
+var (
+	planningLineRegexp       = regexp.MustCompile(`(?:^|\s)(SCHEDULED|DEADLINE):\s*<(\d{4}-\d{2}-\d{2})(?:\s+[A-Za-z]+)?(?:\s+(\d{2}):(\d{2}))?[^>]*>`)
+	closedPlanningLineRegexp = regexp.MustCompile(`(?:^|\s)CLOSED:\s*\[[^\]]+\]`)
+)
 
 func filterDirectBodyNodes(nodes []goorg.Node) []goorg.Node {
 	filtered := make([]goorg.Node, 0, len(nodes))

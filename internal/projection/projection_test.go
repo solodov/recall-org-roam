@@ -68,6 +68,39 @@ Ignored body.
 	}
 }
 
+func TestProjectFileIndexesScheduledAndDeadlinePlanningMetadata(t *testing.T) {
+	t.Helper()
+
+	orgPath := filepath.Join(t.TempDir(), "planning.org")
+	writeOrgFile(t, orgPath, `* TODO Planned
+:PROPERTIES:
+:ID: planned-id
+:END:
+CLOSED: [2026-04-27 Mon 18:00] SCHEDULED: <2026-04-28 Tue 09:15> DEADLINE: <2026-04-29 Wed>
+Body.
+`)
+
+	documents, err := ProjectFile(orgPath)
+	if err != nil {
+		t.Fatalf("project file: %v", err)
+	}
+	if len(documents) != 1 {
+		t.Fatalf("documents = %+v, want 1 projected entry", documents)
+	}
+	if got, want := documents[0].ScheduledDate, "2026-04-28"; got != want {
+		t.Fatalf("scheduledDate = %q, want %q", got, want)
+	}
+	if got, want := mustMinuteOfDay(t, documents[0].ScheduledMinuteOfDay), 9*60+15; got != want {
+		t.Fatalf("scheduledMinuteOfDay = %d, want %d", got, want)
+	}
+	if got, want := documents[0].DeadlineDate, "2026-04-29"; got != want {
+		t.Fatalf("deadlineDate = %q, want %q", got, want)
+	}
+	if documents[0].DeadlineMinuteOfDay != nil {
+		t.Fatalf("deadlineMinuteOfDay = %v, want nil for date-only deadline", *documents[0].DeadlineMinuteOfDay)
+	}
+}
+
 func TestProjectFilePreservesVisiblePathMetadataForSymlinks(t *testing.T) {
 	t.Helper()
 
@@ -217,6 +250,15 @@ func assertDuplicateIDs(t *testing.T, got DuplicateIDsError, want []DuplicateID)
 			}
 		}
 	}
+}
+
+func mustMinuteOfDay(t *testing.T, minuteOfDay *int) int {
+	t.Helper()
+
+	if minuteOfDay == nil {
+		t.Fatal("expected minuteOfDay to be present")
+	}
+	return *minuteOfDay
 }
 
 func writeOrgFile(t *testing.T, path string, content string) {

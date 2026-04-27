@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/blevesearch/bleve/v2"
+
 	"org-search/internal/projection"
 )
 
@@ -153,6 +155,63 @@ func TestUpdateFileReportsAllConflictingIDsAgainstExistingIndex(t *testing.T) {
 	}
 }
 
+func TestRebuildStoresScheduledAndDeadlinePlanningFields(t *testing.T) {
+	t.Helper()
+
+	indexDir := filepath.Join(t.TempDir(), "index")
+	plannedPath := writeIndexFile(t, filepath.Join(t.TempDir(), "planned.org"))
+	scheduledMinuteOfDay := 9*60 + 15
+	deadlineMinuteOfDay := 17 * 60
+	if err := Rebuild(indexDir, []projection.EntryDocument{{
+		ID:                   "planned-id",
+		Path:                 plannedPath,
+		Headline:             "Planned",
+		ScheduledDate:        "2026-04-28",
+		ScheduledMinuteOfDay: &scheduledMinuteOfDay,
+		DeadlineDate:         "2026-04-29",
+		DeadlineMinuteOfDay:  &deadlineMinuteOfDay,
+		Body:                 "body",
+	}, {
+		ID:           "date-only-id",
+		Path:         writeIndexFile(t, filepath.Join(t.TempDir(), "date-only.org")),
+		Headline:     "Date Only",
+		DeadlineDate: "2026-04-30",
+		Body:         "body",
+	}}); err != nil {
+		t.Fatalf("rebuild index: %v", err)
+	}
+
+	index, err := openExistingIndex(indexDir)
+	if err != nil {
+		t.Fatalf("open index: %v", err)
+	}
+	defer func() {
+		_ = index.Close()
+	}()
+
+	plannedFields := storedFieldsForDocumentID(t, index, "planned-id", []string{"scheduled_date", "scheduled_minute_of_day", "deadline_date", "deadline_minute_of_day"})
+	if got, want := plannedFields["scheduled_date"], "2026-04-28"; got != want {
+		t.Fatalf("scheduled_date = %#v, want %#v", got, want)
+	}
+	if got, want := mustStoredFloat64(t, plannedFields, "scheduled_minute_of_day"), float64(scheduledMinuteOfDay); got != want {
+		t.Fatalf("scheduled_minute_of_day = %v, want %v", got, want)
+	}
+	if got, want := plannedFields["deadline_date"], "2026-04-29"; got != want {
+		t.Fatalf("deadline_date = %#v, want %#v", got, want)
+	}
+	if got, want := mustStoredFloat64(t, plannedFields, "deadline_minute_of_day"), float64(deadlineMinuteOfDay); got != want {
+		t.Fatalf("deadline_minute_of_day = %v, want %v", got, want)
+	}
+
+	dateOnlyFields := storedFieldsForDocumentID(t, index, "date-only-id", []string{"deadline_date", "deadline_minute_of_day"})
+	if got, want := dateOnlyFields["deadline_date"], "2026-04-30"; got != want {
+		t.Fatalf("deadline_date = %#v, want %#v", got, want)
+	}
+	if _, ok := dateOnlyFields["deadline_minute_of_day"]; ok {
+		t.Fatalf("deadline_minute_of_day = %#v, want field to be absent for date-only deadlines", dateOnlyFields["deadline_minute_of_day"])
+	}
+}
+
 func TestSearchPassesThroughBleveQueryStringSemantics(t *testing.T) {
 	t.Helper()
 
@@ -206,6 +265,31 @@ func TestSearchReturnsRepairErrorWhenIndexIsMissing(t *testing.T) {
 	if !strings.Contains(err.Error(), "run rebuild") {
 		t.Fatalf("error = %q, want rebuild guidance", err)
 	}
+}
+
+func storedFieldsForDocumentID(t *testing.T, index bleve.Index, id string, fields []string) map[string]interface{} {
+	t.Helper()
+
+	query := bleve.NewTermQuery(id)
+	query.SetField("id")
+	results, err := collectStoredFields(index, query, fields)
+	if err != nil {
+		t.Fatalf("collect stored fields for %q: %v", id, err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("stored fields results = %#v, want exactly one result for %q", results, id)
+	}
+	return results[0]
+}
+
+func mustStoredFloat64(t *testing.T, fields map[string]interface{}, key string) float64 {
+	t.Helper()
+
+	value, ok := fields[key].(float64)
+	if !ok {
+		t.Fatalf("stored field %q = %#v, want float64", key, fields[key])
+	}
+	return value
 }
 
 func writeIndexFile(t *testing.T, path string) string {
