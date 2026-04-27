@@ -1,4 +1,4 @@
-// Package querydialect layers org-search operators like is:overdue on top of raw Bleve query-string syntax.
+// Package querydialect layers org-search operators like is:overdue and due:today on top of raw Bleve query-string syntax.
 package querydialect
 
 import (
@@ -124,7 +124,8 @@ type dialectOperator interface {
 }
 
 var dialectOperators = map[string]dialectOperator{
-	"is": isOperator{},
+	"is":  isOperator{},
+	"due": dueOperator{},
 }
 
 type isOperator struct{}
@@ -133,12 +134,21 @@ func (isOperator) compile(value string, now time.Time) (blevequery.Query, error)
 	switch value {
 	case "overdue":
 		return overdueQuery(now), nil
-	case "due-today":
-		return dueTodayQuery(now), nil
-	case "due-this-week":
-		return dueThisWeekQuery(now), nil
 	default:
 		return nil, fmt.Errorf("unsupported is: filter %q", value)
+	}
+}
+
+type dueOperator struct{}
+
+func (dueOperator) compile(value string, now time.Time) (blevequery.Query, error) {
+	switch value {
+	case "today":
+		return dueTodayQuery(now), nil
+	case "this-week":
+		return dueThisWeekQuery(now), nil
+	default:
+		return nil, fmt.Errorf("unsupported due: filter %q", value)
 	}
 }
 

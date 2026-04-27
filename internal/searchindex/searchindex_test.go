@@ -214,7 +214,7 @@ func TestRebuildStoresScheduledAndDeadlinePlanningFields(t *testing.T) {
 	}
 }
 
-func TestSearchSupportsPlanningAwareIsFilters(t *testing.T) {
+func TestSearchSupportsPlanningAwareDialectFilters(t *testing.T) {
 	t.Helper()
 
 	indexDir := filepath.Join(t.TempDir(), "index")
@@ -238,19 +238,19 @@ func TestSearchSupportsPlanningAwareIsFilters(t *testing.T) {
 	}
 	assertHitIDs(t, hits, []string{"overdue-scheduled-yesterday", "overdue-deadline-earlier-today"})
 
-	hits, err = searchAt(indexDir, "is:due-today", now)
+	hits, err = searchAt(indexDir, "due:today", now)
 	if err != nil {
 		t.Fatalf("search due today: %v", err)
 	}
 	assertHitIDs(t, hits, []string{"overdue-deadline-earlier-today", "due-today-later"})
 
-	hits, err = searchAt(indexDir, "is:due-this-week", now)
+	hits, err = searchAt(indexDir, "due:this-week", now)
 	if err != nil {
 		t.Fatalf("search due this week: %v", err)
 	}
 	assertHitIDs(t, hits, []string{"overdue-scheduled-yesterday", "overdue-deadline-earlier-today", "due-today-later", "due-this-week"})
 
-	hits, err = searchAt(indexDir, "charlie is:due-today", now)
+	hits, err = searchAt(indexDir, "charlie due:today", now)
 	if err != nil {
 		t.Fatalf("search mixed raw bleve and due today: %v", err)
 	}
