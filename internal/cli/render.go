@@ -46,8 +46,31 @@ func writeHumanRebuild(writer io.Writer, response app.RebuildResponse) error {
 }
 
 func writeHumanUpdateFile(writer io.Writer, response app.UpdateFileResponse) error {
-	_, err := fmt.Fprintf(writer, "Updated file index\nPath: %s\nDeleted entries: %d\nIndexed entries: %d\n", response.Path, response.DeletedEntryCount, response.IndexedEntryCount)
-	return err
+	switch response.Status {
+	case app.UpdateFileStatusUpdated:
+		_, err := fmt.Fprintf(writer, "Updated file index\nPath: %s\nDeleted entries: %d\nIndexed entries: %d\n", response.Path, response.DeletedEntryCount, response.IndexedEntryCount)
+		return err
+	case app.UpdateFileStatusDeleted:
+		_, err := fmt.Fprintf(writer, "Cleaned stale file index\nPath: %s\nDeleted entries: %d\n", response.Path, response.DeletedEntryCount)
+		return err
+	case app.UpdateFileStatusSkipped:
+		_, err := fmt.Fprintf(writer, "Skipped file index update\nPath: %s\nReason: %s\n", response.Path, humanSkipReason(response.SkipReason))
+		return err
+	default:
+		_, err := fmt.Fprintf(writer, "Updated file index\nPath: %s\nDeleted entries: %d\nIndexed entries: %d\n", response.Path, response.DeletedEntryCount, response.IndexedEntryCount)
+		return err
+	}
+}
+
+func humanSkipReason(reason app.UpdateFileSkipReason) string {
+	switch reason {
+	case app.UpdateFileSkipReasonOutsideCorpus:
+		return "file is outside the configured corpus"
+	case app.UpdateFileSkipReasonNotIndexed:
+		return "missing file had no indexed entries"
+	default:
+		return string(reason)
+	}
 }
 
 func writeHumanSearch(writer io.Writer, response app.SearchResponse) error {

@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"org-search/internal/discovery"
 )
 
 func TestNewServiceUsesDefaultConfigPathForRebuildAndSearch(t *testing.T) {
@@ -99,6 +101,9 @@ newbody
 	if !ok {
 		t.Fatalf("updateResult type = %T, want UpdateFileResponse", updateResult)
 	}
+	if got, want := updateResponse.Status, UpdateFileStatusUpdated; got != want {
+		t.Fatalf("status = %q, want %q", got, want)
+	}
 	if got, want := updateResponse.Path, mustCanonicalPath(t, canonicalPath); got != want {
 		t.Fatalf("path = %q, want %q", got, want)
 	}
@@ -134,6 +139,9 @@ newbody
 		t.Fatalf("delete missing file from index: %v", err)
 	}
 	updateResponse = updateResult.(UpdateFileResponse)
+	if got, want := updateResponse.Status, UpdateFileStatusDeleted; got != want {
+		t.Fatalf("status = %q, want %q", got, want)
+	}
 	if got, want := updateResponse.DeletedEntryCount, 1; got != want {
 		t.Fatalf("deletedEntryCount = %d, want %d", got, want)
 	}
@@ -147,6 +155,101 @@ newbody
 	}
 	if hits := searchResult.(SearchResponse).Hits; len(hits) != 0 {
 		t.Fatalf("hits after deletion = %+v, want none", hits)
+	}
+}
+
+func TestNewServiceUpdateFileSkipsOutsideCorpus(t *testing.T) {
+	t.Helper()
+
+	rootDir := t.TempDir()
+	notesRoot := filepath.Join(rootDir, "notes")
+	indexDirectory := filepath.Join(rootDir, "index")
+	insidePath := filepath.Join(notesRoot, "inside.org")
+	outsidePath := filepath.Join(rootDir, "outside.org")
+	writeOrgFile(t, insidePath, `* Inside
+:PROPERTIES:
+:ID: inside-id
+:END:
+insidebody
+`)
+	writeOrgFile(t, outsidePath, `* Outside
+:PROPERTIES:
+:ID: outside-id
+:END:
+outsidebody
+`)
+
+	configPath := filepath.Join(rootDir, "config.txtpb")
+	writeConfigFile(t, configPath, "notes_root: \""+notesRoot+"\"\nindex_directory: \""+indexDirectory+"\"")
+
+	service := NewService()
+	if _, err := service.Rebuild(context.Background(), RebuildRequest{ConfigPath: configPath}); err != nil {
+		t.Fatalf("rebuild index: %v", err)
+	}
+
+	updateResult, err := service.UpdateFile(context.Background(), UpdateFileRequest{ConfigPath: configPath, Path: outsidePath})
+	if err != nil {
+		t.Fatalf("update outside file: %v", err)
+	}
+	updateResponse := updateResult.(UpdateFileResponse)
+	if got, want := updateResponse.Status, UpdateFileStatusSkipped; got != want {
+		t.Fatalf("status = %q, want %q", got, want)
+	}
+	if got, want := updateResponse.SkipReason, UpdateFileSkipReasonOutsideCorpus; got != want {
+		t.Fatalf("skipReason = %q, want %q", got, want)
+	}
+	if got, want := updateResponse.Path, mustCanonicalPath(t, outsidePath); got != want {
+		t.Fatalf("path = %q, want %q", got, want)
+	}
+	if updateResponse.DeletedEntryCount != 0 || updateResponse.IndexedEntryCount != 0 {
+		t.Fatalf("updateResponse = %+v, want zero counts for skip", updateResponse)
+	}
+
+	searchResult, err := service.Search(context.Background(), SearchRequest{ConfigPath: configPath, Query: "outsidebody"})
+	if err != nil {
+		t.Fatalf("search skipped file content: %v", err)
+	}
+	if hits := searchResult.(SearchResponse).Hits; len(hits) != 0 {
+		t.Fatalf("hits = %+v, want skipped outside file to stay unindexed", hits)
+	}
+}
+
+func TestNewServiceUpdateFileSkipsMissingUnindexedFile(t *testing.T) {
+	t.Helper()
+
+	rootDir := t.TempDir()
+	notesRoot := filepath.Join(rootDir, "notes")
+	indexDirectory := filepath.Join(rootDir, "index")
+	insidePath := filepath.Join(notesRoot, "inside.org")
+	missingPath := filepath.Join(notesRoot, "missing.org")
+	writeOrgFile(t, insidePath, `* Inside
+:PROPERTIES:
+:ID: inside-id
+:END:
+insidebody
+`)
+
+	configPath := filepath.Join(rootDir, "config.txtpb")
+	writeConfigFile(t, configPath, "notes_root: \""+notesRoot+"\"\nindex_directory: \""+indexDirectory+"\"")
+
+	service := NewService()
+	if _, err := service.Rebuild(context.Background(), RebuildRequest{ConfigPath: configPath}); err != nil {
+		t.Fatalf("rebuild index: %v", err)
+	}
+
+	updateResult, err := service.UpdateFile(context.Background(), UpdateFileRequest{ConfigPath: configPath, Path: missingPath})
+	if err != nil {
+		t.Fatalf("update missing unindexed file: %v", err)
+	}
+	updateResponse := updateResult.(UpdateFileResponse)
+	if got, want := updateResponse.Status, UpdateFileStatusSkipped; got != want {
+		t.Fatalf("status = %q, want %q", got, want)
+	}
+	if got, want := updateResponse.SkipReason, UpdateFileSkipReasonNotIndexed; got != want {
+		t.Fatalf("skipReason = %q, want %q", got, want)
+	}
+	if got, want := updateResponse.Path, mustCanonicalPath(t, missingPath); got != want {
+		t.Fatalf("path = %q, want %q", got, want)
 	}
 }
 
@@ -206,8 +309,13 @@ func mustCanonicalPath(t *testing.T, path string) string {
 	t.Helper()
 
 	canonicalPath, err := filepath.EvalSymlinks(path)
-	if err != nil {
+	if err == nil {
+		return canonicalPath
+	}
+
+	resolvedPath, resolveErr := discovery.CanonicalizePath(path)
+	if resolveErr != nil {
 		t.Fatalf("canonicalize path %q: %v", path, err)
 	}
-	return canonicalPath
+	return resolvedPath
 }

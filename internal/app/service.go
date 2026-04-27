@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"org-search/internal/config"
 	"org-search/internal/discovery"
@@ -43,11 +42,35 @@ type UpdateFileRequest struct {
 	Path       string
 }
 
-// UpdateFileResponse stores the JSON result for one exact-path index replacement.
+// UpdateFileStatus identifies the structured update-file outcome used by editor integrations.
+type UpdateFileStatus string
+
+const (
+	// UpdateFileStatusUpdated reports that one reachable corpus file was reindexed.
+	UpdateFileStatusUpdated UpdateFileStatus = "updated"
+	// UpdateFileStatusDeleted reports that stale indexed documents were removed for a missing file.
+	UpdateFileStatusDeleted UpdateFileStatus = "deleted"
+	// UpdateFileStatusSkipped reports that update-file intentionally performed no index mutation.
+	UpdateFileStatusSkipped UpdateFileStatus = "skipped"
+)
+
+// UpdateFileSkipReason identifies why update-file intentionally skipped mutation.
+type UpdateFileSkipReason string
+
+const (
+	// UpdateFileSkipReasonOutsideCorpus reports that the target file does not belong to the configured corpus.
+	UpdateFileSkipReasonOutsideCorpus UpdateFileSkipReason = "outside_corpus"
+	// UpdateFileSkipReasonNotIndexed reports that a missing file had no indexed documents to clean up.
+	UpdateFileSkipReasonNotIndexed UpdateFileSkipReason = "not_indexed"
+)
+
+// UpdateFileResponse stores the structured result for one editor-safe file sync.
 type UpdateFileResponse struct {
-	Path              string `json:"path"`
-	DeletedEntryCount int    `json:"deleted_entry_count"`
-	IndexedEntryCount int    `json:"indexed_entry_count"`
+	Status            UpdateFileStatus     `json:"status"`
+	Path              string               `json:"path"`
+	DeletedEntryCount int                  `json:"deleted_entry_count,omitempty"`
+	IndexedEntryCount int                  `json:"indexed_entry_count,omitempty"`
+	SkipReason        UpdateFileSkipReason `json:"skip_reason,omitempty"`
 }
 
 // SearchRequest stores the CLI inputs for one search query.
@@ -105,16 +128,27 @@ func (service) UpdateFile(_ context.Context, request UpdateFileRequest) (any, er
 		return nil, err
 	}
 
-	canonicalPath, documents, err := prepareFileUpdate(request.Path)
+	prepared, err := prepareFileUpdate(cfg.NotesRoot, request.Path)
 	if err != nil {
 		return nil, err
 	}
-	result, err := searchindex.UpdateFile(cfg.IndexDirectory, canonicalPath, documents)
+	if prepared.skipReason != "" {
+		return UpdateFileResponse{Status: UpdateFileStatusSkipped, Path: prepared.canonicalPath, SkipReason: prepared.skipReason}, nil
+	}
+
+	result, err := searchindex.UpdateFile(cfg.IndexDirectory, prepared.canonicalPath, prepared.documents)
 	if err != nil {
 		return nil, err
+	}
+	if prepared.missingFile {
+		if result.DeletedEntryCount == 0 {
+			return UpdateFileResponse{Status: UpdateFileStatusSkipped, Path: prepared.canonicalPath, SkipReason: UpdateFileSkipReasonNotIndexed}, nil
+		}
+		return UpdateFileResponse{Status: UpdateFileStatusDeleted, Path: prepared.canonicalPath, DeletedEntryCount: result.DeletedEntryCount}, nil
 	}
 	return UpdateFileResponse{
-		Path:              canonicalPath,
+		Status:            UpdateFileStatusUpdated,
+		Path:              prepared.canonicalPath,
 		DeletedEntryCount: result.DeletedEntryCount,
 		IndexedEntryCount: result.IndexedEntryCount,
 	}, nil
@@ -152,31 +186,56 @@ func warningsFromDiscovery(warnings []discovery.Warning) []Warning {
 	return converted
 }
 
-func prepareFileUpdate(path string) (string, []projection.EntryDocument, error) {
+type preparedFileUpdate struct {
+	canonicalPath string
+	documents     []projection.EntryDocument
+	missingFile   bool
+	skipReason    UpdateFileSkipReason
+}
+
+func prepareFileUpdate(notesRoot string, path string) (preparedFileUpdate, error) {
 	canonicalPath, err := discovery.CanonicalizePath(path)
 	if err != nil {
-		return "", nil, fmt.Errorf("canonicalize file path %q: %w", path, err)
+		return preparedFileUpdate{}, fmt.Errorf("canonicalize file path %q: %w", path, err)
 	}
 
 	info, err := os.Stat(canonicalPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return canonicalPath, nil, nil
+			return preparedFileUpdate{canonicalPath: canonicalPath, missingFile: true}, nil
 		}
-		return "", nil, fmt.Errorf("stat file %q: %w", canonicalPath, err)
+		return preparedFileUpdate{}, fmt.Errorf("stat file %q: %w", canonicalPath, err)
 	}
 	if info.IsDir() {
-		return "", nil, fmt.Errorf("file path %q is a directory", canonicalPath)
+		return preparedFileUpdate{}, fmt.Errorf("file path %q is a directory", canonicalPath)
 	}
-	if filepath.Ext(canonicalPath) != ".org" {
-		return canonicalPath, nil, nil
+
+	inCorpus, err := fileInCorpus(notesRoot, canonicalPath)
+	if err != nil {
+		return preparedFileUpdate{}, err
+	}
+	if !inCorpus {
+		return preparedFileUpdate{canonicalPath: canonicalPath, skipReason: UpdateFileSkipReasonOutsideCorpus}, nil
 	}
 
 	documents, err := projection.ProjectFile(canonicalPath)
 	if err != nil {
-		return "", nil, err
+		return preparedFileUpdate{}, err
 	}
-	return canonicalPath, documents, nil
+	return preparedFileUpdate{canonicalPath: canonicalPath, documents: documents}, nil
+}
+
+func fileInCorpus(notesRoot string, canonicalPath string) (bool, error) {
+	result, err := discovery.Discover(notesRoot)
+	if err != nil {
+		return false, err
+	}
+	for _, path := range result.Paths {
+		if path == canonicalPath {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func searchHitsFromIndex(hits []searchindex.SearchHit) []SearchHit {

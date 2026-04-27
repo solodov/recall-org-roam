@@ -84,10 +84,11 @@ func TestRunDispatchesRebuildCommandWithJSONOutput(t *testing.T) {
 	}
 }
 
-func TestRunDispatchesUpdateFileCommandWithHumanOutput(t *testing.T) {
+func TestRunDispatchesUpdatedFileCommandWithHumanOutput(t *testing.T) {
 	t.Helper()
 
 	service := &fakeService{updateFileResponse: app.UpdateFileResponse{
+		Status:            app.UpdateFileStatusUpdated,
 		Path:              "/notes/file.org",
 		DeletedEntryCount: 1,
 		IndexedEntryCount: 2,
@@ -107,6 +108,52 @@ func TestRunDispatchesUpdateFileCommandWithHumanOutput(t *testing.T) {
 	}
 	if got, want := service.updateFileRequest.ConfigPath, "/tmp/config.txtpb"; got != want {
 		t.Fatalf("configPath = %q, want %q", got, want)
+	}
+}
+
+func TestRunDispatchesSkippedFileCommandWithHumanOutput(t *testing.T) {
+	t.Helper()
+
+	service := &fakeService{updateFileResponse: app.UpdateFileResponse{
+		Status:     app.UpdateFileStatusSkipped,
+		Path:       "/notes/outside.org",
+		SkipReason: app.UpdateFileSkipReasonOutsideCorpus,
+	}}
+	var stdout strings.Builder
+	var stderr strings.Builder
+
+	exitCode := Run(context.Background(), []string{"update-file", "/notes/outside.org"}, &stdout, &stderr, service)
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0", exitCode)
+	}
+	if got, want := stdout.String(), "Skipped file index update\nPath: /notes/outside.org\nReason: file is outside the configured corpus\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q, want empty", stderr.String())
+	}
+}
+
+func TestRunDispatchesUpdateFileCommandWithJSONOutput(t *testing.T) {
+	t.Helper()
+
+	service := &fakeService{updateFileResponse: app.UpdateFileResponse{
+		Status:     app.UpdateFileStatusSkipped,
+		Path:       "/notes/outside.org",
+		SkipReason: app.UpdateFileSkipReasonOutsideCorpus,
+	}}
+	var stdout strings.Builder
+	var stderr strings.Builder
+
+	exitCode := Run(context.Background(), []string{"--json", "update-file", "/notes/outside.org"}, &stdout, &stderr, service)
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0", exitCode)
+	}
+	if got, want := stdout.String(), "{\"status\":\"skipped\",\"path\":\"/notes/outside.org\",\"skip_reason\":\"outside_corpus\"}\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q, want empty", stderr.String())
 	}
 }
 
