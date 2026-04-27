@@ -4,8 +4,10 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/blevesearch/bleve/v2"
 
@@ -212,6 +214,49 @@ func TestRebuildStoresScheduledAndDeadlinePlanningFields(t *testing.T) {
 	}
 }
 
+func TestSearchSupportsPlanningAwareIsFilters(t *testing.T) {
+	t.Helper()
+
+	indexDir := filepath.Join(t.TempDir(), "index")
+	overdueScheduledYesterday := projection.EntryDocument{ID: "overdue-scheduled-yesterday", Path: writeIndexFile(t, filepath.Join(t.TempDir(), "overdue-scheduled-yesterday.org")), Headline: "Overdue Scheduled Yesterday", ScheduledDate: "2026-04-28", Body: "alpha"}
+	overdueDeadlineEarlierTodayMinute := 9 * 60
+	overdueDeadlineEarlierToday := projection.EntryDocument{ID: "overdue-deadline-earlier-today", Path: writeIndexFile(t, filepath.Join(t.TempDir(), "overdue-deadline-earlier-today.org")), Headline: "Overdue Deadline Earlier Today", DeadlineDate: "2026-04-29", DeadlineMinuteOfDay: &overdueDeadlineEarlierTodayMinute, Body: "bravo"}
+	dueTodayLaterMinute := 15 * 60
+	dueTodayLater := projection.EntryDocument{ID: "due-today-later", Path: writeIndexFile(t, filepath.Join(t.TempDir(), "due-today-later.org")), Headline: "Due Today Later", ScheduledDate: "2026-04-29", ScheduledMinuteOfDay: &dueTodayLaterMinute, Body: "charlie"}
+	dueThisWeek := projection.EntryDocument{ID: "due-this-week", Path: writeIndexFile(t, filepath.Join(t.TempDir(), "due-this-week.org")), Headline: "Due This Week", DeadlineDate: "2026-05-03", Body: "delta"}
+	nextWeek := projection.EntryDocument{ID: "next-week", Path: writeIndexFile(t, filepath.Join(t.TempDir(), "next-week.org")), Headline: "Next Week", DeadlineDate: "2026-05-04", Body: "echo"}
+	noPlanning := projection.EntryDocument{ID: "no-planning", Path: writeIndexFile(t, filepath.Join(t.TempDir(), "no-planning.org")), Headline: "No Planning", Body: "foxtrot"}
+	if err := Rebuild(indexDir, []projection.EntryDocument{overdueScheduledYesterday, overdueDeadlineEarlierToday, dueTodayLater, dueThisWeek, nextWeek, noPlanning}); err != nil {
+		t.Fatalf("rebuild index: %v", err)
+	}
+
+	now := time.Date(2026, time.April, 29, 10, 30, 0, 0, time.UTC)
+
+	hits, err := searchAt(indexDir, "is:overdue", now)
+	if err != nil {
+		t.Fatalf("search overdue: %v", err)
+	}
+	assertHitIDs(t, hits, []string{"overdue-scheduled-yesterday", "overdue-deadline-earlier-today"})
+
+	hits, err = searchAt(indexDir, "is:due-today", now)
+	if err != nil {
+		t.Fatalf("search due today: %v", err)
+	}
+	assertHitIDs(t, hits, []string{"overdue-deadline-earlier-today", "due-today-later"})
+
+	hits, err = searchAt(indexDir, "is:due-this-week", now)
+	if err != nil {
+		t.Fatalf("search due this week: %v", err)
+	}
+	assertHitIDs(t, hits, []string{"overdue-scheduled-yesterday", "overdue-deadline-earlier-today", "due-today-later", "due-this-week"})
+
+	hits, err = searchAt(indexDir, "charlie is:due-today", now)
+	if err != nil {
+		t.Fatalf("search mixed raw bleve and due today: %v", err)
+	}
+	assertHitIDs(t, hits, []string{"due-today-later"})
+}
+
 func TestSearchPassesThroughBleveQueryStringSemantics(t *testing.T) {
 	t.Helper()
 
@@ -302,6 +347,26 @@ func writeIndexFile(t *testing.T, path string) string {
 		t.Fatalf("write file %q: %v", path, err)
 	}
 	return path
+}
+
+func assertHitIDs(t *testing.T, hits []SearchHit, want []string) {
+	t.Helper()
+
+	got := make([]string, 0, len(hits))
+	for _, hit := range hits {
+		got = append(got, hit.ID)
+	}
+	sort.Strings(got)
+	want = append([]string(nil), want...)
+	sort.Strings(want)
+	if len(got) != len(want) {
+		t.Fatalf("hit ids = %v, want %v", got, want)
+	}
+	for index := range want {
+		if got[index] != want[index] {
+			t.Fatalf("hit ids = %v, want %v", got, want)
+		}
+	}
 }
 
 func assertDuplicateIDs(t *testing.T, got projection.DuplicateIDsError, want []projection.DuplicateID) {

@@ -83,7 +83,7 @@ func newUpdateFileCommand(stdout io.Writer, options *renderOptions, service app.
 func newSearchCommand(stdout io.Writer, options *renderOptions, service app.Service, configPath *string) *cobra.Command {
 	return &cobra.Command{
 		Use:   "search QUERY",
-		Short: "Run one Bleve query against indexed Org entries",
+		Short: "Run one org-search query against indexed Org entries",
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(command *cobra.Command, args []string) error {
 			result, err := service.Search(command.Context(), app.SearchRequest{ConfigPath: *configPath, Query: strings.Join(args, " ")})

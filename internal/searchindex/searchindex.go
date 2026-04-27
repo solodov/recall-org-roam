@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/blevesearch/bleve/v2"
 	"github.com/blevesearch/bleve/v2/mapping"
 	"github.com/blevesearch/bleve/v2/search/query"
 
 	"org-search/internal/projection"
+	"org-search/internal/querydialect"
 )
 
 const pageSize = 1000
@@ -88,8 +90,12 @@ func UpdateFile(indexDirectory string, path string, documents []projection.Entry
 	return UpdateResult{DeletedEntryCount: deletedEntryCount, IndexedEntryCount: len(documents)}, nil
 }
 
-// Search runs one Bleve query-string search after removing stale file-backed documents.
+// Search runs one org-search query dialect search after removing stale file-backed documents.
 func Search(indexDirectory string, rawQuery string) ([]SearchHit, error) {
+	return searchAt(indexDirectory, rawQuery, time.Now())
+}
+
+func searchAt(indexDirectory string, rawQuery string, now time.Time) ([]SearchHit, error) {
 	index, err := openExistingIndex(indexDirectory)
 	if err != nil {
 		return nil, err
@@ -102,8 +108,11 @@ func Search(indexDirectory string, rawQuery string) ([]SearchHit, error) {
 		return nil, err
 	}
 
-	query := bleve.NewQueryStringQuery(rawQuery)
-	hits, err := collectSearchHits(index, query)
+	compiledQuery, err := querydialect.Compile(rawQuery, now)
+	if err != nil {
+		return nil, err
+	}
+	hits, err := collectSearchHits(index, compiledQuery)
 	if err != nil {
 		return nil, fmt.Errorf("search index %q: %w", indexDirectory, err)
 	}
