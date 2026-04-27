@@ -247,6 +247,68 @@ Body.
 	}
 }
 
+func TestProjectFileIndexesParentIDsAncestorIDsAndOutline(t *testing.T) {
+	t.Helper()
+
+	orgPath := filepath.Join(t.TempDir(), "hierarchy.org")
+	writeOrgFile(t, orgPath, `* Root with ID
+:PROPERTIES:
+:ID: root-id
+:END:
+Body.
+
+** Parent without ID
+Body.
+
+*** Child with ID
+:PROPERTIES:
+:ID: child-id
+:END:
+Body.
+
+**** Grandchild with ID
+:PROPERTIES:
+:ID: grandchild-id
+:END:
+Body.
+`)
+
+	documents, err := ProjectFile(orgPath, taghierarchy.Hierarchy{})
+	if err != nil {
+		t.Fatalf("project file: %v", err)
+	}
+	if len(documents) != 3 {
+		t.Fatalf("documents = %+v, want 3 projected entries", documents)
+	}
+	if got, want := documents[0].Outline, "Root with ID"; got != want {
+		t.Fatalf("root outline = %q, want %q", got, want)
+	}
+	if documents[0].ParentID != "" {
+		t.Fatalf("root parentID = %q, want empty", documents[0].ParentID)
+	}
+	if len(documents[0].AncestorIDs) != 0 {
+		t.Fatalf("root ancestorIDs = %#v, want none", documents[0].AncestorIDs)
+	}
+	if got, want := documents[1].Outline, "Root with ID / Parent without ID / Child with ID"; got != want {
+		t.Fatalf("child outline = %q, want %q", got, want)
+	}
+	if documents[1].ParentID != "" {
+		t.Fatalf("child parentID = %q, want empty when immediate parent has no ID", documents[1].ParentID)
+	}
+	if got, want := documents[1].AncestorIDs, []string{"root-id"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("child ancestorIDs = %#v, want %#v", got, want)
+	}
+	if got, want := documents[2].ParentID, "child-id"; got != want {
+		t.Fatalf("grandchild parentID = %q, want %q", got, want)
+	}
+	if got, want := documents[2].AncestorIDs, []string{"root-id", "child-id"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("grandchild ancestorIDs = %#v, want %#v", got, want)
+	}
+	if got, want := documents[2].Outline, "Root with ID / Parent without ID / Child with ID / Grandchild with ID"; got != want {
+		t.Fatalf("grandchild outline = %q, want %q", got, want)
+	}
+}
+
 func TestProjectFileIndexesScheduledAndDeadlinePlanningMetadata(t *testing.T) {
 	t.Helper()
 

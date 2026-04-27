@@ -19,9 +19,12 @@ const pageSize = 1000
 
 // SearchHit stores the search fields the application layer needs for rendering.
 type SearchHit struct {
-	ID       string
-	Path     string
-	Headline string
+	ID          string
+	Path        string
+	ParentID    string
+	AncestorIDs []string
+	Outline     string
+	Headline    string
 }
 
 // UpdateResult stores the exact-path replacement outcome for one file update.
@@ -158,6 +161,15 @@ func indexDocuments(index bleve.Index, documents []projection.EntryDocument) err
 			"is_done":        document.IsDone,
 			"is_archived":    document.IsArchived,
 			"body":           document.Body,
+		}
+		if document.ParentID != "" {
+			indexDocument["parent_id"] = document.ParentID
+		}
+		if len(document.AncestorIDs) > 0 {
+			indexDocument["ancestor_id"] = document.AncestorIDs
+		}
+		if document.Outline != "" {
+			indexDocument["outline"] = document.Outline
 		}
 		if len(document.Tags) > 0 {
 			indexDocument["tag"] = document.Tags
@@ -345,7 +357,7 @@ func collectSearchHits(index bleve.Index, query query.Query) ([]SearchHit, error
 	hits := make([]SearchHit, 0)
 	for from := 0; ; from += pageSize {
 		request := bleve.NewSearchRequestOptions(query, pageSize, from, false)
-		request.Fields = []string{"headline", "path"}
+		request.Fields = []string{"headline", "path", "parent_id", "ancestor_id", "outline"}
 		result, err := index.Search(request)
 		if err != nil {
 			return nil, err
@@ -353,11 +365,42 @@ func collectSearchHits(index bleve.Index, query query.Query) ([]SearchHit, error
 		for _, hit := range result.Hits {
 			headline, _ := hit.Fields["headline"].(string)
 			path, _ := hit.Fields["path"].(string)
-			hits = append(hits, SearchHit{ID: hit.ID, Path: path, Headline: headline})
+			parentID, _ := hit.Fields["parent_id"].(string)
+			outline, _ := hit.Fields["outline"].(string)
+			hits = append(hits, SearchHit{ID: hit.ID, Path: path, ParentID: parentID, AncestorIDs: storedStringSlice(hit.Fields["ancestor_id"]), Outline: outline, Headline: headline})
 		}
 		if len(result.Hits) < pageSize {
 			return hits, nil
 		}
+	}
+}
+
+func storedStringSlice(value any) []string {
+	switch value := value.(type) {
+	case nil:
+		return nil
+	case string:
+		if value == "" {
+			return nil
+		}
+		return []string{value}
+	case []string:
+		return append([]string(nil), value...)
+	case []interface{}:
+		values := make([]string, 0, len(value))
+		for _, rawValue := range value {
+			stringValue, ok := rawValue.(string)
+			if !ok || stringValue == "" {
+				continue
+			}
+			values = append(values, stringValue)
+		}
+		if len(values) == 0 {
+			return nil
+		}
+		return values
+	default:
+		return nil
 	}
 }
 
@@ -396,6 +439,18 @@ func newIndexMapping() *mapping.IndexMappingImpl {
 	canonicalPathFieldMapping := bleve.NewKeywordFieldMapping()
 	canonicalPathFieldMapping.Store = true
 	canonicalPathFieldMapping.IncludeInAll = false
+
+	parentIDFieldMapping := bleve.NewKeywordFieldMapping()
+	parentIDFieldMapping.Store = true
+	parentIDFieldMapping.IncludeInAll = false
+
+	ancestorIDFieldMapping := bleve.NewKeywordFieldMapping()
+	ancestorIDFieldMapping.Store = true
+	ancestorIDFieldMapping.IncludeInAll = false
+
+	outlineFieldMapping := bleve.NewTextFieldMapping()
+	outlineFieldMapping.Store = true
+	outlineFieldMapping.IncludeInAll = false
 
 	headlineFieldMapping := bleve.NewTextFieldMapping()
 	headlineFieldMapping.Store = true
@@ -442,6 +497,9 @@ func newIndexMapping() *mapping.IndexMappingImpl {
 	indexMapping.DefaultMapping.AddFieldMappingsAt("id", idFieldMapping)
 	indexMapping.DefaultMapping.AddFieldMappingsAt("path", pathFieldMapping)
 	indexMapping.DefaultMapping.AddFieldMappingsAt("canonical_path", canonicalPathFieldMapping)
+	indexMapping.DefaultMapping.AddFieldMappingsAt("parent_id", parentIDFieldMapping)
+	indexMapping.DefaultMapping.AddFieldMappingsAt("ancestor_id", ancestorIDFieldMapping)
+	indexMapping.DefaultMapping.AddFieldMappingsAt("outline", outlineFieldMapping)
 	indexMapping.DefaultMapping.AddFieldMappingsAt("headline", headlineFieldMapping)
 	indexMapping.DefaultMapping.AddFieldMappingsAt("todo", todoFieldMapping)
 	indexMapping.DefaultMapping.AddFieldMappingsAt("is_done", isDoneFieldMapping)

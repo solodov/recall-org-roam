@@ -183,10 +183,10 @@ func TestRunDispatchesSearchCommandWithGroupedUnderlinedTerminalLinks(t *testing
 	}
 }
 
-func TestRunDispatchesSearchCommandWithUnchangedJSONOutput(t *testing.T) {
+func TestRunDispatchesSearchCommandWithJSONMetadataOutput(t *testing.T) {
 	t.Helper()
 
-	service := &fakeService{searchResponse: app.SearchResponse{Hits: []app.SearchHit{{ID: "alpha-id", Path: "projects/model.org", Headline: "Alpha Headline"}}}}
+	service := &fakeService{searchResponse: app.SearchResponse{Hits: []app.SearchHit{{ID: "alpha-id", ParentID: "parent-id", AncestorIDs: []string{"root-id", "parent-id"}, Outline: "Root / Parent / Alpha Headline", Path: "projects/model.org", Headline: "Alpha Headline"}}}}
 	var stdout strings.Builder
 	var stderr strings.Builder
 
@@ -194,7 +194,7 @@ func TestRunDispatchesSearchCommandWithUnchangedJSONOutput(t *testing.T) {
 	if exitCode != 0 {
 		t.Fatalf("exitCode = %d, want 0", exitCode)
 	}
-	if got, want := stdout.String(), "{\"hits\":[{\"id\":\"alpha-id\",\"headline\":\"Alpha Headline\"}]}\n"; got != want {
+	if got, want := stdout.String(), "{\"hits\":[{\"id\":\"alpha-id\",\"parent_id\":\"parent-id\",\"ancestor_id\":[\"root-id\",\"parent-id\"],\"outline\":\"Root / Parent / Alpha Headline\",\"headline\":\"Alpha Headline\"}]}\n"; got != want {
 		t.Fatalf("stdout = %q, want %q", got, want)
 	}
 	if stderr.Len() != 0 {

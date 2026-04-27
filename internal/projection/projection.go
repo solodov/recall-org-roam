@@ -23,6 +23,9 @@ type EntryDocument struct {
 	ID                   string
 	Path                 string
 	CanonicalPath        string
+	ParentID             string
+	AncestorIDs          []string
+	Outline              string
 	Headline             string
 	Todo                 string
 	IsDone               bool
@@ -127,12 +130,12 @@ func projectCanonicalFile(canonicalPath string, visiblePath string, hierarchy ta
 	fileCategory := fileCategory(document)
 	fileTags := parseFileTags(bufferSetting(document, "FILETAGS"))
 	for _, section := range document.Outline.Children {
-		collectSectionDocuments(section, visiblePath, canonicalPath, fileCategory, fileTags, false, todoKeywords, doneKeywords, hierarchy, &projected)
+		collectSectionDocuments(section, visiblePath, canonicalPath, fileCategory, fileTags, false, todoKeywords, doneKeywords, hierarchy, nil, nil, "", &projected)
 	}
 	return projected, nil
 }
 
-func collectSectionDocuments(section *goorg.Section, visiblePath string, canonicalPath string, inheritedCategory string, inheritedTags []string, inheritedArchived bool, todoKeywords []string, doneKeywords map[string]struct{}, hierarchy taghierarchy.Hierarchy, projected *[]EntryDocument) {
+func collectSectionDocuments(section *goorg.Section, visiblePath string, canonicalPath string, inheritedCategory string, inheritedTags []string, inheritedArchived bool, todoKeywords []string, doneKeywords map[string]struct{}, hierarchy taghierarchy.Hierarchy, inheritedOutline []string, inheritedAncestorIDs []string, immediateParentID string, projected *[]EntryDocument) {
 	if section == nil || section.Headline == nil {
 		return
 	}
@@ -148,13 +151,19 @@ func collectSectionDocuments(section *goorg.Section, visiblePath string, canonic
 	archived := inheritedArchived || hasArchiveTag(rawTags)
 	planning := extractPlanningMetadata(directBodyNodes)
 	status, headline := projectedHeadlineMetadata(section.Headline, todoKeywords)
+	outlineSegments := appendStringCopy(inheritedOutline, outlineSegment(headline))
+	outline := strings.Join(outlineSegments, " / ")
+	currentID := ""
 	if id, ok := properties.Get("ID"); ok {
-		trimmedID := strings.TrimSpace(id)
-		if trimmedID != "" {
+		currentID = strings.TrimSpace(id)
+		if currentID != "" {
 			*projected = append(*projected, EntryDocument{
-				ID:                   trimmedID,
+				ID:                   currentID,
 				Path:                 visiblePath,
 				CanonicalPath:        canonicalPath,
+				ParentID:             immediateParentID,
+				AncestorIDs:          appendStringCopy(nil, inheritedAncestorIDs...),
+				Outline:              outline,
 				Headline:             headline,
 				Todo:                 status,
 				IsDone:               isDoneStatus(status, doneKeywords),
@@ -170,9 +179,31 @@ func collectSectionDocuments(section *goorg.Section, visiblePath string, canonic
 		}
 	}
 
-	for _, child := range section.Children {
-		collectSectionDocuments(child, visiblePath, canonicalPath, category, rawTags, archived, todoKeywords, doneKeywords, hierarchy, projected)
+	childAncestorIDs := inheritedAncestorIDs
+	if currentID != "" {
+		childAncestorIDs = appendStringCopy(inheritedAncestorIDs, currentID)
 	}
+	childParentID := ""
+	if currentID != "" {
+		childParentID = currentID
+	}
+	for _, child := range section.Children {
+		collectSectionDocuments(child, visiblePath, canonicalPath, category, rawTags, archived, todoKeywords, doneKeywords, hierarchy, outlineSegments, childAncestorIDs, childParentID, projected)
+	}
+}
+
+func outlineSegment(headline string) string {
+	trimmedHeadline := strings.TrimSpace(headline)
+	if trimmedHeadline == "" {
+		return "(untitled)"
+	}
+	return trimmedHeadline
+}
+
+func appendStringCopy(base []string, values ...string) []string {
+	combined := append([]string(nil), base...)
+	combined = append(combined, values...)
+	return combined
 }
 
 func inheritTags(inheritedTags []string, localTags []string) []string {

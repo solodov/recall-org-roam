@@ -89,10 +89,13 @@ type SearchResponse struct {
 
 // SearchHit stores the CLI search hit. Path metadata stays out of JSON and is used only for human rendering.
 type SearchHit struct {
-	ID       string `json:"id"`
-	Path     string `json:"-"`
-	FilePath string `json:"-"`
-	Headline string `json:"headline"`
+	ID          string   `json:"id"`
+	ParentID    string   `json:"parent_id,omitempty"`
+	AncestorIDs []string `json:"ancestor_id,omitempty"`
+	Outline     string   `json:"outline,omitempty"`
+	Path        string   `json:"-"`
+	FilePath    string   `json:"-"`
+	Headline    string   `json:"headline"`
 }
 
 // NewService returns the default application service used by the CLI.
@@ -281,7 +284,7 @@ func searchHitsFromIndex(notesRoot string, hits []searchindex.SearchHit) []Searc
 	}
 	converted := make([]SearchHit, 0, len(hits))
 	for _, hit := range hits {
-		converted = append(converted, SearchHit{ID: hit.ID, Path: relativeSearchHitPath(notesRoot, hit.Path), FilePath: hit.Path, Headline: hit.Headline})
+		converted = append(converted, SearchHit{ID: hit.ID, ParentID: hit.ParentID, AncestorIDs: hit.AncestorIDs, Outline: hit.Outline, Path: relativeSearchHitPath(notesRoot, hit.Path), FilePath: hit.Path, Headline: hit.Headline})
 	}
 	return converted
 }

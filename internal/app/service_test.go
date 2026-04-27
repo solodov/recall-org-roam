@@ -63,6 +63,55 @@ alphabody
 	}
 }
 
+func TestNewServiceSearchReturnsParentIDsAncestorIDsAndOutline(t *testing.T) {
+	t.Helper()
+
+	rootDir := t.TempDir()
+	notesRoot := filepath.Join(rootDir, "notes")
+	indexDirectory := filepath.Join(rootDir, "index")
+	writeOrgFile(t, filepath.Join(notesRoot, "entry.org"), `* Root
+:PROPERTIES:
+:ID: root-id
+:END:
+Body.
+
+** Parent without ID
+Body.
+
+*** Child
+:PROPERTIES:
+:ID: child-id
+:END:
+needle
+`)
+
+	configPath := filepath.Join(rootDir, "config.txtpb")
+	writeConfigFile(t, configPath, "notes_root: \""+notesRoot+"\"\nindex_directory: \""+indexDirectory+"\"")
+
+	service := NewService()
+	if _, err := service.Rebuild(context.Background(), RebuildRequest{ConfigPath: configPath}); err != nil {
+		t.Fatalf("rebuild index: %v", err)
+	}
+
+	searchResult, err := service.Search(context.Background(), SearchRequest{ConfigPath: configPath, Query: "needle"})
+	if err != nil {
+		t.Fatalf("search index: %v", err)
+	}
+	searchResponse := searchResult.(SearchResponse)
+	if len(searchResponse.Hits) != 1 || searchResponse.Hits[0].ID != "child-id" {
+		t.Fatalf("search hits = %+v, want child-id", searchResponse.Hits)
+	}
+	if searchResponse.Hits[0].ParentID != "" {
+		t.Fatalf("parentID = %q, want empty for non-indexed immediate parent", searchResponse.Hits[0].ParentID)
+	}
+	if got, want := strings.Join(searchResponse.Hits[0].AncestorIDs, ","), "root-id"; got != want {
+		t.Fatalf("ancestorIDs = %q, want %q", got, want)
+	}
+	if got, want := searchResponse.Hits[0].Outline, "Root / Parent without ID / Child"; got != want {
+		t.Fatalf("outline = %q, want %q", got, want)
+	}
+}
+
 func TestNewServiceUpdateFileReplacesAndDeletesOneCanonicalPath(t *testing.T) {
 	t.Helper()
 
