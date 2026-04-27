@@ -25,6 +25,7 @@ type EntryDocument struct {
 	Headline             string
 	Todo                 string
 	IsDone               bool
+	IsArchived           bool
 	Category             string
 	ScheduledDate        string
 	ScheduledMinuteOfDay *int
@@ -123,12 +124,12 @@ func projectCanonicalFile(canonicalPath string, visiblePath string) ([]EntryDocu
 	doneKeywords := collectDoneKeywords(todoKeywordSetting(document))
 	fileCategory := fileCategory(document)
 	for _, section := range document.Outline.Children {
-		collectSectionDocuments(section, visiblePath, canonicalPath, fileCategory, todoKeywords, doneKeywords, &projected)
+		collectSectionDocuments(section, visiblePath, canonicalPath, fileCategory, false, todoKeywords, doneKeywords, &projected)
 	}
 	return projected, nil
 }
 
-func collectSectionDocuments(section *goorg.Section, visiblePath string, canonicalPath string, inheritedCategory string, todoKeywords []string, doneKeywords map[string]struct{}, projected *[]EntryDocument) {
+func collectSectionDocuments(section *goorg.Section, visiblePath string, canonicalPath string, inheritedCategory string, inheritedArchived bool, todoKeywords []string, doneKeywords map[string]struct{}, projected *[]EntryDocument) {
 	if section == nil || section.Headline == nil {
 		return
 	}
@@ -139,6 +140,7 @@ func collectSectionDocuments(section *goorg.Section, visiblePath string, canonic
 	if propertyCategory, ok := properties.Get("CATEGORY"); ok && strings.TrimSpace(propertyCategory) != "" {
 		category = strings.TrimSpace(propertyCategory)
 	}
+	archived := inheritedArchived || hasArchiveTag(section.Headline.Tags)
 	planning := extractPlanningMetadata(directBodyNodes)
 	status, headline := projectedHeadlineMetadata(section.Headline, todoKeywords)
 	if id, ok := properties.Get("ID"); ok {
@@ -151,6 +153,7 @@ func collectSectionDocuments(section *goorg.Section, visiblePath string, canonic
 				Headline:             headline,
 				Todo:                 status,
 				IsDone:               isDoneStatus(status, doneKeywords),
+				IsArchived:           archived,
 				Category:             category,
 				ScheduledDate:        planning.scheduledDate,
 				ScheduledMinuteOfDay: planning.scheduledMinuteOfDay,
@@ -162,8 +165,17 @@ func collectSectionDocuments(section *goorg.Section, visiblePath string, canonic
 	}
 
 	for _, child := range section.Children {
-		collectSectionDocuments(child, visiblePath, canonicalPath, category, todoKeywords, doneKeywords, projected)
+		collectSectionDocuments(child, visiblePath, canonicalPath, category, archived, todoKeywords, doneKeywords, projected)
 	}
+}
+
+func hasArchiveTag(tags []string) bool {
+	for _, tag := range tags {
+		if strings.TrimSpace(tag) == "ARCHIVE" {
+			return true
+		}
+	}
+	return false
 }
 
 func fileCategory(document *goorg.Document) string {

@@ -19,6 +19,27 @@ func TestParseKeepsRawBleveTokensAndExtractsDialectPredicates(t *testing.T) {
 	if got, want := parsed.predicates, []predicate{{operator: "is", value: "overdue"}, {operator: "due", value: "today"}}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("predicates = %#v, want %#v", got, want)
 	}
+	if parsed.includeArchived {
+		t.Fatal("includeArchived = true, want false")
+	}
+}
+
+func TestParseMarksExplicitArchivedRequests(t *testing.T) {
+	t.Helper()
+
+	parsed, err := parse(`+is_archived:true`)
+	if err != nil {
+		t.Fatalf("parse query: %v", err)
+	}
+	if !parsed.includeArchived {
+		t.Fatal("includeArchived = false, want true")
+	}
+	if parsed.rawQueryText != "" {
+		t.Fatalf("rawQueryText = %q, want empty", parsed.rawQueryText)
+	}
+	if got, want := parsed.predicates, []predicate{{operator: "is", value: "archived"}}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("predicates = %#v, want %#v", got, want)
+	}
 }
 
 func TestParseRejectsMissingDialectOperatorValues(t *testing.T) {

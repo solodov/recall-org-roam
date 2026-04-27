@@ -192,9 +192,12 @@ func TestRebuildStoresScheduledAndDeadlinePlanningFields(t *testing.T) {
 		_ = index.Close()
 	}()
 
-	plannedFields := storedFieldsForDocumentID(t, index, "planned-id", []string{"category", "scheduled_date", "scheduled_minute_of_day", "deadline_date", "deadline_minute_of_day"})
+	plannedFields := storedFieldsForDocumentID(t, index, "planned-id", []string{"category", "is_archived", "scheduled_date", "scheduled_minute_of_day", "deadline_date", "deadline_minute_of_day"})
 	if got, want := plannedFields["category"], "work"; got != want {
 		t.Fatalf("category = %#v, want %#v", got, want)
+	}
+	if got, want := plannedFields["is_archived"], false; got != want {
+		t.Fatalf("is_archived = %#v, want %#v", got, want)
 	}
 	if got, want := plannedFields["scheduled_date"], "2026-04-28"; got != want {
 		t.Fatalf("scheduled_date = %#v, want %#v", got, want)
@@ -230,10 +233,11 @@ func TestSearchSupportsPlanningAwareDialectFilters(t *testing.T) {
 	dueTodayLater := projection.EntryDocument{ID: "due-today-later", Path: writeIndexFile(t, filepath.Join(t.TempDir(), "due-today-later.org")), Headline: "Due Today Later", ScheduledDate: "2026-04-29", ScheduledMinuteOfDay: &dueTodayLaterMinute, Body: "delta"}
 	dueThisWeek := projection.EntryDocument{ID: "due-this-week", Path: writeIndexFile(t, filepath.Join(t.TempDir(), "due-this-week.org")), Headline: "Due This Week", DeadlineDate: "2026-05-03", Body: "echo"}
 	nextWeek := projection.EntryDocument{ID: "next-week", Path: writeIndexFile(t, filepath.Join(t.TempDir(), "next-week.org")), Headline: "Next Week", DeadlineDate: "2026-05-04", Body: "foxtrot"}
-	doneOverdue := projection.EntryDocument{ID: "done-overdue", Path: writeIndexFile(t, filepath.Join(t.TempDir(), "done-overdue.org")), Headline: "Done Overdue", Todo: "DONE", IsDone: true, DeadlineDate: "2026-04-20", Body: "golf"}
-	legacyDoneOverdue := projection.EntryDocument{ID: "legacy-done-overdue", Path: writeIndexFile(t, filepath.Join(t.TempDir(), "legacy-done-overdue.org")), Headline: "Legacy Done Overdue", Todo: "DONE", DeadlineDate: "2026-04-18", Body: "hotel"}
-	noPlanning := projection.EntryDocument{ID: "no-planning", Path: writeIndexFile(t, filepath.Join(t.TempDir(), "no-planning.org")), Headline: "No Planning", Body: "india"}
-	if err := Rebuild(indexDir, []projection.EntryDocument{overdueScheduledYesterday, overdueLastWeek, overdueDeadlineEarlierToday, dueTodayLater, dueThisWeek, nextWeek, doneOverdue, legacyDoneOverdue, noPlanning}); err != nil {
+	archivedOverdue := projection.EntryDocument{ID: "archived-overdue", Path: writeIndexFile(t, filepath.Join(t.TempDir(), "archived-overdue.org")), Headline: "Archived Overdue", IsArchived: true, DeadlineDate: "2026-04-10", Body: "golf"}
+	doneOverdue := projection.EntryDocument{ID: "done-overdue", Path: writeIndexFile(t, filepath.Join(t.TempDir(), "done-overdue.org")), Headline: "Done Overdue", Todo: "DONE", IsDone: true, DeadlineDate: "2026-04-20", Body: "hotel"}
+	legacyDoneOverdue := projection.EntryDocument{ID: "legacy-done-overdue", Path: writeIndexFile(t, filepath.Join(t.TempDir(), "legacy-done-overdue.org")), Headline: "Legacy Done Overdue", Todo: "DONE", DeadlineDate: "2026-04-18", Body: "india"}
+	noPlanning := projection.EntryDocument{ID: "no-planning", Path: writeIndexFile(t, filepath.Join(t.TempDir(), "no-planning.org")), Headline: "No Planning", Body: "juliet"}
+	if err := Rebuild(indexDir, []projection.EntryDocument{overdueScheduledYesterday, overdueLastWeek, overdueDeadlineEarlierToday, dueTodayLater, dueThisWeek, nextWeek, archivedOverdue, doneOverdue, legacyDoneOverdue, noPlanning}); err != nil {
 		t.Fatalf("rebuild index: %v", err)
 	}
 
@@ -262,6 +266,44 @@ func TestSearchSupportsPlanningAwareDialectFilters(t *testing.T) {
 		t.Fatalf("search mixed raw bleve and due today: %v", err)
 	}
 	assertHitIDs(t, hits, []string{"due-today-later"})
+}
+
+func TestSearchExcludesArchivedEntriesByDefaultUnlessRequested(t *testing.T) {
+	t.Helper()
+
+	indexDir := filepath.Join(t.TempDir(), "index")
+	visiblePath := writeIndexFile(t, filepath.Join(t.TempDir(), "visible.org"))
+	archivedPath := writeIndexFile(t, filepath.Join(t.TempDir(), "archived.org"))
+	if err := Rebuild(indexDir, []projection.EntryDocument{
+		{ID: "visible-id", Path: visiblePath, Headline: "Visible", Body: "shared-term"},
+		{ID: "archived-id", Path: archivedPath, Headline: "Archived", IsArchived: true, Body: "shared-term archived-only"},
+	}); err != nil {
+		t.Fatalf("rebuild index: %v", err)
+	}
+
+	hits, err := Search(indexDir, "shared-term")
+	if err != nil {
+		t.Fatalf("search default visibility: %v", err)
+	}
+	assertHitIDs(t, hits, []string{"visible-id"})
+
+	hits, err = Search(indexDir, "is:archived")
+	if err != nil {
+		t.Fatalf("search archived dialect filter: %v", err)
+	}
+	assertHitIDs(t, hits, []string{"archived-id"})
+
+	hits, err = Search(indexDir, "archived-only is:archived")
+	if err != nil {
+		t.Fatalf("search archived mixed query: %v", err)
+	}
+	assertHitIDs(t, hits, []string{"archived-id"})
+
+	hits, err = Search(indexDir, "+is_archived:true +archived-only")
+	if err != nil {
+		t.Fatalf("search archived raw field query: %v", err)
+	}
+	assertHitIDs(t, hits, []string{"archived-id"})
 }
 
 func TestSearchPassesThroughBleveQueryStringSemantics(t *testing.T) {

@@ -169,6 +169,50 @@ Body.
 	}
 }
 
+func TestProjectFileInheritsArchivedStateFromArchiveTag(t *testing.T) {
+	t.Helper()
+
+	orgPath := filepath.Join(t.TempDir(), "archived.org")
+	writeOrgFile(t, orgPath, `* Archived parent :ARCHIVE:
+Body.
+
+** Archived child
+:PROPERTIES:
+:ID: archived-child-id
+:END:
+Body.
+
+* Directly archived :ARCHIVE:
+:PROPERTIES:
+:ID: archived-id
+:END:
+Body.
+
+* Visible entry
+:PROPERTIES:
+:ID: visible-id
+:END:
+Body.
+`)
+
+	documents, err := ProjectFile(orgPath)
+	if err != nil {
+		t.Fatalf("project file: %v", err)
+	}
+	if len(documents) != 3 {
+		t.Fatalf("documents = %+v, want 3 projected entries", documents)
+	}
+	if !documents[0].IsArchived {
+		t.Fatal("archived child IsArchived = false, want true")
+	}
+	if !documents[1].IsArchived {
+		t.Fatal("directly archived entry IsArchived = false, want true")
+	}
+	if documents[2].IsArchived {
+		t.Fatal("visible entry IsArchived = true, want false")
+	}
+}
+
 func TestProjectFileIndexesScheduledAndDeadlinePlanningMetadata(t *testing.T) {
 	t.Helper()
 

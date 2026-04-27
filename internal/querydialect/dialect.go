@@ -1,4 +1,4 @@
-// Package querydialect layers org-search operators like is:overdue and due:today on top of raw Bleve query-string syntax.
+// Package querydialect layers org-search operators like is:overdue and due:today on top of raw Bleve query-string syntax while hiding archived entries by default.
 package querydialect
 
 import (
@@ -22,7 +22,12 @@ func Compile(raw string, now time.Time) (blevequery.Query, error) {
 		return nil, err
 	}
 
-	filters := make([]blevequery.Query, 0, len(parsed.predicates))
+	baseQueryText := strings.TrimSpace(parsed.rawQueryText)
+	if baseQueryText == "" && len(parsed.predicates) == 0 {
+		return bleve.NewMatchNoneQuery(), nil
+	}
+
+	filters := make([]blevequery.Query, 0, len(parsed.predicates)+1)
 	for _, predicate := range parsed.predicates {
 		operator, ok := dialectOperators[predicate.operator]
 		if !ok {
@@ -35,12 +40,13 @@ func Compile(raw string, now time.Time) (blevequery.Query, error) {
 		filters = append(filters, filter)
 	}
 
-	baseQueryText := strings.TrimSpace(parsed.rawQueryText)
+	if !parsed.includeArchived {
+		filters = append(filters, notArchivedQuery())
+	}
+
 	switch {
 	case baseQueryText != "" && len(filters) == 0:
 		return bleve.NewQueryStringQuery(baseQueryText), nil
-	case baseQueryText == "" && len(filters) == 0:
-		return bleve.NewMatchNoneQuery(), nil
 	case baseQueryText == "":
 		return conjunction(filters), nil
 	default:
@@ -52,8 +58,9 @@ func Compile(raw string, now time.Time) (blevequery.Query, error) {
 }
 
 type parsedQuery struct {
-	rawQueryText string
-	predicates   []predicate
+	rawQueryText    string
+	predicates      []predicate
+	includeArchived bool
 }
 
 type predicate struct {
@@ -65,7 +72,14 @@ func parse(raw string) (parsedQuery, error) {
 	tokens := scanTokens(raw)
 	keptTokens := make([]string, 0, len(tokens))
 	predicates := make([]predicate, 0)
+	includeArchived := false
 	for _, token := range tokens {
+		if tokenExplicitlyRequestsArchived(token) {
+			includeArchived = true
+			predicates = append(predicates, predicate{operator: "is", value: "archived"})
+			continue
+		}
+
 		operatorName, value, hasOperator := strings.Cut(token, ":")
 		if !hasOperator {
 			keptTokens = append(keptTokens, token)
@@ -80,8 +94,28 @@ func parse(raw string) (parsedQuery, error) {
 			return parsedQuery{}, fmt.Errorf("query operator %q requires a value", operatorName+":")
 		}
 		predicates = append(predicates, predicate{operator: operatorName, value: trimmedValue})
+		if operatorName == "is" && trimmedValue == "archived" {
+			includeArchived = true
+		}
 	}
-	return parsedQuery{rawQueryText: strings.Join(keptTokens, " "), predicates: predicates}, nil
+	return parsedQuery{rawQueryText: strings.Join(keptTokens, " "), predicates: predicates, includeArchived: includeArchived}, nil
+}
+
+func tokenExplicitlyRequestsArchived(token string) bool {
+	trimmed := strings.TrimSpace(token)
+	if trimmed == "" {
+		return false
+	}
+	if strings.HasPrefix(trimmed, "-") {
+		return false
+	}
+	trimmed = strings.TrimLeft(trimmed, "+")
+	trimmed = strings.Trim(trimmed, "()")
+	field, value, hasField := strings.Cut(trimmed, ":")
+	if !hasField || field != "is_archived" {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(strings.Trim(value, "()")), "true")
 }
 
 func scanTokens(raw string) []string {
@@ -132,6 +166,8 @@ type isOperator struct{}
 
 func (isOperator) compile(value string, now time.Time) (blevequery.Query, error) {
 	switch value {
+	case "archived":
+		return archivedQuery(), nil
 	case "overdue":
 		return overdueQuery(now), nil
 	default:
@@ -224,6 +260,18 @@ func numericBeforeQuery(field string, max float64) blevequery.Query {
 	numericQuery := bleve.NewNumericRangeQuery(nil, &max)
 	numericQuery.SetField(field)
 	return numericQuery
+}
+
+func archivedQuery() blevequery.Query {
+	archivedBoolQuery := bleve.NewBoolFieldQuery(true)
+	archivedBoolQuery.SetField("is_archived")
+	return archivedBoolQuery
+}
+
+func notArchivedQuery() blevequery.Query {
+	booleanQuery := bleve.NewBooleanQuery()
+	booleanQuery.AddMustNot(archivedQuery())
+	return booleanQuery
 }
 
 func notDoneQuery() blevequery.Query {

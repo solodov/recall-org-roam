@@ -91,6 +91,7 @@ func UpdateFile(indexDirectory string, path string, documents []projection.Entry
 }
 
 // Search runs one org-search query dialect search after removing stale file-backed documents.
+// Archived entries stay hidden unless the query explicitly asks for them.
 func Search(indexDirectory string, rawQuery string) ([]SearchHit, error) {
 	return searchAt(indexDirectory, rawQuery, time.Now())
 }
@@ -155,6 +156,7 @@ func indexDocuments(index bleve.Index, documents []projection.EntryDocument) err
 			"headline":       document.Headline,
 			"todo":           document.Todo,
 			"is_done":        document.IsDone,
+			"is_archived":    document.IsArchived,
 			"body":           document.Body,
 		}
 		if document.Category != "" {
@@ -403,6 +405,10 @@ func newIndexMapping() *mapping.IndexMappingImpl {
 	isDoneFieldMapping.Store = true
 	isDoneFieldMapping.IncludeInAll = false
 
+	isArchivedFieldMapping := bleve.NewBooleanFieldMapping()
+	isArchivedFieldMapping.Store = true
+	isArchivedFieldMapping.IncludeInAll = false
+
 	categoryFieldMapping := bleve.NewKeywordFieldMapping()
 	categoryFieldMapping.Store = true
 	categoryFieldMapping.IncludeInAll = false
@@ -432,6 +438,7 @@ func newIndexMapping() *mapping.IndexMappingImpl {
 	indexMapping.DefaultMapping.AddFieldMappingsAt("headline", headlineFieldMapping)
 	indexMapping.DefaultMapping.AddFieldMappingsAt("todo", todoFieldMapping)
 	indexMapping.DefaultMapping.AddFieldMappingsAt("is_done", isDoneFieldMapping)
+	indexMapping.DefaultMapping.AddFieldMappingsAt("is_archived", isArchivedFieldMapping)
 	indexMapping.DefaultMapping.AddFieldMappingsAt("category", categoryFieldMapping)
 	indexMapping.DefaultMapping.AddFieldMappingsAt("scheduled_date", scheduledDateFieldMapping)
 	indexMapping.DefaultMapping.AddFieldMappingsAt("scheduled_minute_of_day", scheduledMinuteOfDayFieldMapping)
