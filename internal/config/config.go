@@ -18,8 +18,9 @@ const (
 
 // Config stores the normalized org-search runtime configuration.
 type Config struct {
-	NotesRoot      string
-	IndexDirectory string
+	NotesRoot              string
+	IndexDirectory         string
+	ExcludedDirectoryNames []string
 }
 
 // Load reads, decodes, and normalizes one txtpb config file.
@@ -54,7 +55,12 @@ func LoadBytes(path string, raw []byte) (Config, error) {
 		}
 	}
 
-	return Config{NotesRoot: notesRoot, IndexDirectory: indexDirectory}, nil
+	excludedDirectoryNames, err := normalizeExcludedDirectoryNames(decoded.GetExcludedDirectoryNames())
+	if err != nil {
+		return Config{}, fmt.Errorf("validate config %q: excluded_directory_names: %w", path, err)
+	}
+
+	return Config{NotesRoot: notesRoot, IndexDirectory: indexDirectory, ExcludedDirectoryNames: excludedDirectoryNames}, nil
 }
 
 // ResolvePath normalizes one optional config file path and applies the default XDG location when empty.
@@ -80,6 +86,42 @@ func normalizeOptionalDirectoryPath(raw string) (string, error) {
 		return "", nil
 	}
 	return normalizeAbsolutePath(trimmed)
+}
+
+func normalizeExcludedDirectoryNames(raw []string) ([]string, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+
+	normalized := make([]string, 0, len(raw))
+	seen := make(map[string]struct{}, len(raw))
+	for _, entry := range raw {
+		name, err := normalizeExcludedDirectoryName(entry)
+		if err != nil {
+			return nil, err
+		}
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		seen[name] = struct{}{}
+		normalized = append(normalized, name)
+	}
+	return normalized, nil
+}
+
+func normalizeExcludedDirectoryName(raw string) (string, error) {
+	trimmed := strings.TrimSpace(raw)
+	trimmed = strings.TrimRight(trimmed, `/\\`)
+	if trimmed == "" {
+		return "", fmt.Errorf("entries must not be empty")
+	}
+	if trimmed == "." || trimmed == ".." {
+		return "", fmt.Errorf("entry %q must be a directory name, not %q", raw, trimmed)
+	}
+	if strings.ContainsAny(trimmed, `/\\`) {
+		return "", fmt.Errorf("entry %q must be a directory name, not a path", raw)
+	}
+	return trimmed, nil
 }
 
 func normalizeAbsolutePath(raw string) (string, error) {

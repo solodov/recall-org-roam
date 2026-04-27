@@ -10,6 +10,11 @@ import (
 	"sort"
 )
 
+// Options stores discovery-time corpus filters.
+type Options struct {
+	ExcludedDirectoryNames []string
+}
+
 // File stores one reachable Org file with its visible corpus path and canonical file identity.
 type File struct {
 	Path          string
@@ -29,8 +34,8 @@ type Warning struct {
 	Message string
 }
 
-// Discover walks one notes root, follows reachable symlinks, and returns deduplicated visible Org file paths keyed by canonical identity.
-func Discover(root string) (Result, error) {
+// Discover walks one notes root, follows reachable symlinks, applies visible-name directory exclusions, and returns deduplicated visible Org file paths keyed by canonical identity.
+func Discover(root string, options Options) (Result, error) {
 	visibleRoot, err := absolutePath(root)
 	if err != nil {
 		return Result{}, fmt.Errorf("normalize notes root %q: %w", root, err)
@@ -49,8 +54,9 @@ func Discover(root string) (Result, error) {
 	}
 
 	walker := discoveryWalker{
-		seenDirectories: map[string]struct{}{},
-		seenFiles:       map[string]File{},
+		excludedDirectoryNames: excludedDirectoryNameSet(options.ExcludedDirectoryNames),
+		seenDirectories:        map[string]struct{}{},
+		seenFiles:              map[string]File{},
 	}
 	if err := walker.visitDirectory(visibleRoot, canonicalRoot, true); err != nil {
 		return Result{}, err
@@ -94,9 +100,10 @@ func CanonicalizePath(path string) (string, error) {
 }
 
 type discoveryWalker struct {
-	seenDirectories map[string]struct{}
-	seenFiles       map[string]File
-	warnings        []Warning
+	excludedDirectoryNames map[string]struct{}
+	seenDirectories        map[string]struct{}
+	seenFiles              map[string]File
+	warnings               []Warning
 }
 
 func (walker *discoveryWalker) result() Result {
@@ -128,6 +135,10 @@ func (walker *discoveryWalker) result() Result {
 }
 
 func (walker *discoveryWalker) visitDirectory(visiblePath string, canonicalPath string, isRoot bool) error {
+	if !isRoot && walker.shouldSkipDirectory(visiblePath) {
+		return nil
+	}
+
 	canonicalPath = filepath.Clean(canonicalPath)
 	if _, seen := walker.seenDirectories[canonicalPath]; seen {
 		return nil
@@ -206,8 +217,24 @@ func (walker *discoveryWalker) visitFile(visiblePath string, canonicalPath strin
 	walker.seenFiles[canonicalPath] = File{Path: visiblePath, CanonicalPath: canonicalPath}
 }
 
+func (walker *discoveryWalker) shouldSkipDirectory(path string) bool {
+	_, ok := walker.excludedDirectoryNames[filepath.Base(path)]
+	return ok
+}
+
 func (walker *discoveryWalker) addWarning(path string, message string) {
 	walker.warnings = append(walker.warnings, Warning{Path: path, Message: message})
+}
+
+func excludedDirectoryNameSet(names []string) map[string]struct{} {
+	if len(names) == 0 {
+		return nil
+	}
+	set := make(map[string]struct{}, len(names))
+	for _, name := range names {
+		set[name] = struct{}{}
+	}
+	return set
 }
 
 func ensureReadableFile(path string) error {

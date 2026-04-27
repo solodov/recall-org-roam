@@ -107,7 +107,7 @@ func (service) Rebuild(_ context.Context, request RebuildRequest) (any, error) {
 		return nil, err
 	}
 
-	result, err := discovery.Discover(cfg.NotesRoot)
+	result, err := discovery.Discover(cfg.NotesRoot, discoveryOptions(cfg))
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +132,7 @@ func (service) UpdateFile(_ context.Context, request UpdateFileRequest) (any, er
 		return nil, err
 	}
 
-	prepared, err := prepareFileUpdate(cfg.NotesRoot, request.Path)
+	prepared, err := prepareFileUpdate(cfg, request.Path)
 	if err != nil {
 		return nil, err
 	}
@@ -179,6 +179,10 @@ func loadConfig(path string) (config.Config, error) {
 	return config.Load(resolvedPath)
 }
 
+func discoveryOptions(cfg config.Config) discovery.Options {
+	return discovery.Options{ExcludedDirectoryNames: cfg.ExcludedDirectoryNames}
+}
+
 func warningsFromDiscovery(warnings []discovery.Warning) []Warning {
 	if len(warnings) == 0 {
 		return nil
@@ -197,7 +201,7 @@ type preparedFileUpdate struct {
 	skipReason    UpdateFileSkipReason
 }
 
-func prepareFileUpdate(notesRoot string, path string) (preparedFileUpdate, error) {
+func prepareFileUpdate(cfg config.Config, path string) (preparedFileUpdate, error) {
 	canonicalPath, err := discovery.CanonicalizePath(path)
 	if err != nil {
 		return preparedFileUpdate{}, fmt.Errorf("canonicalize file path %q: %w", path, err)
@@ -214,7 +218,7 @@ func prepareFileUpdate(notesRoot string, path string) (preparedFileUpdate, error
 		return preparedFileUpdate{}, fmt.Errorf("file path %q is a directory", canonicalPath)
 	}
 
-	corpusFile, inCorpus, err := findCorpusFile(notesRoot, canonicalPath)
+	corpusFile, inCorpus, err := findCorpusFile(cfg, canonicalPath)
 	if err != nil {
 		return preparedFileUpdate{}, err
 	}
@@ -229,8 +233,8 @@ func prepareFileUpdate(notesRoot string, path string) (preparedFileUpdate, error
 	return preparedFileUpdate{canonicalPath: canonicalPath, documents: documents}, nil
 }
 
-func findCorpusFile(notesRoot string, canonicalPath string) (discovery.File, bool, error) {
-	result, err := discovery.Discover(notesRoot)
+func findCorpusFile(cfg config.Config, canonicalPath string) (discovery.File, bool, error) {
+	result, err := discovery.Discover(cfg.NotesRoot, discoveryOptions(cfg))
 	if err != nil {
 		return discovery.File{}, false, err
 	}

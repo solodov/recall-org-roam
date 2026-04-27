@@ -75,6 +75,10 @@ func TestLoadBytesNormalizesHomeRelativePaths(t *testing.T) {
 	cfg, err := LoadBytes("test.txtpb", []byte(`
 notes_root: "  ~/notes  "
 index_directory: " ~/index "
+excluded_directory_names: " excluded-one/ "
+excluded_directory_names: "excluded-two"
+excluded_directory_names: "excluded-three//"
+excluded_directory_names: "excluded-two/"
 `))
 	if err != nil {
 		t.Fatalf("load config: %v", err)
@@ -85,6 +89,9 @@ index_directory: " ~/index "
 	}
 	if got, want := cfg.IndexDirectory, filepath.Join(homeDir, "index"); got != want {
 		t.Fatalf("index_directory = %q, want %q", got, want)
+	}
+	if got, want := strings.Join(cfg.ExcludedDirectoryNames, ","), "excluded-one,excluded-two,excluded-three"; got != want {
+		t.Fatalf("excluded_directory_names = %q, want %q", got, want)
 	}
 }
 
@@ -112,6 +119,15 @@ func TestLoadBytesRejectsRelativeIndexDirectory(t *testing.T) {
 	_, err := LoadBytes("test.txtpb", []byte(`notes_root: "/notes" index_directory: "index"`))
 	if err == nil || !strings.Contains(err.Error(), "index_directory: must be absolute after normalization") {
 		t.Fatalf("expected relative index_directory error, got %v", err)
+	}
+}
+
+func TestLoadBytesRejectsExcludedDirectoryNamePaths(t *testing.T) {
+	t.Helper()
+
+	_, err := LoadBytes("test.txtpb", []byte(`notes_root: "/notes" excluded_directory_names: "excluded/nested"`))
+	if err == nil || !strings.Contains(err.Error(), "excluded_directory_names") {
+		t.Fatalf("expected excluded_directory_names validation error, got %v", err)
 	}
 }
 

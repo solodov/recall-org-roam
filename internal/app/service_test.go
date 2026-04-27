@@ -220,6 +220,78 @@ outsidebody
 	}
 }
 
+func TestNewServiceRebuildAndUpdateFileRespectExcludedDirectoryNames(t *testing.T) {
+	t.Helper()
+
+	rootDir := t.TempDir()
+	notesRoot := filepath.Join(rootDir, "notes")
+	indexDirectory := filepath.Join(rootDir, "index")
+	includedPath := filepath.Join(notesRoot, "included", "inside.org")
+	excludedPath := filepath.Join(notesRoot, "excluded-one", "inside.org")
+	writeOrgFile(t, includedPath, `* Included
+:PROPERTIES:
+:ID: included-id
+:END:
+includedbody
+`)
+	writeOrgFile(t, excludedPath, `* Excluded
+:PROPERTIES:
+:ID: excluded-id
+:END:
+excludedbody
+`)
+
+	configPath := filepath.Join(rootDir, "config.txtpb")
+	writeConfigFile(t, configPath, "notes_root: \""+notesRoot+"\"\nindex_directory: \""+indexDirectory+"\"\nexcluded_directory_names: \"excluded-one\"\nexcluded_directory_names: \"excluded-two/\"")
+
+	service := NewService()
+	if _, err := service.Rebuild(context.Background(), RebuildRequest{ConfigPath: configPath}); err != nil {
+		t.Fatalf("rebuild index: %v", err)
+	}
+
+	searchResult, err := service.Search(context.Background(), SearchRequest{ConfigPath: configPath, Query: "includedbody"})
+	if err != nil {
+		t.Fatalf("search included content: %v", err)
+	}
+	if hits := searchResult.(SearchResponse).Hits; len(hits) != 1 || hits[0].ID != "included-id" {
+		t.Fatalf("included hits = %+v, want included-id", hits)
+	}
+
+	searchResult, err = service.Search(context.Background(), SearchRequest{ConfigPath: configPath, Query: "excludedbody"})
+	if err != nil {
+		t.Fatalf("search excluded content: %v", err)
+	}
+	if hits := searchResult.(SearchResponse).Hits; len(hits) != 0 {
+		t.Fatalf("excluded hits = %+v, want none", hits)
+	}
+
+	writeOrgFile(t, excludedPath, `* Excluded
+:PROPERTIES:
+:ID: excluded-id
+:END:
+updated-excludedbody
+`)
+	updateResult, err := service.UpdateFile(context.Background(), UpdateFileRequest{ConfigPath: configPath, Path: excludedPath})
+	if err != nil {
+		t.Fatalf("update excluded file: %v", err)
+	}
+	updateResponse := updateResult.(UpdateFileResponse)
+	if got, want := updateResponse.Status, UpdateFileStatusSkipped; got != want {
+		t.Fatalf("status = %q, want %q", got, want)
+	}
+	if got, want := updateResponse.SkipReason, UpdateFileSkipReasonOutsideCorpus; got != want {
+		t.Fatalf("skipReason = %q, want %q", got, want)
+	}
+
+	searchResult, err = service.Search(context.Background(), SearchRequest{ConfigPath: configPath, Query: "updated-excludedbody"})
+	if err != nil {
+		t.Fatalf("search updated excluded content: %v", err)
+	}
+	if hits := searchResult.(SearchResponse).Hits; len(hits) != 0 {
+		t.Fatalf("updated excluded hits = %+v, want none", hits)
+	}
+}
+
 func TestNewServiceUpdateFileSkipsMissingUnindexedFile(t *testing.T) {
 	t.Helper()
 

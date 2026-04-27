@@ -11,4 +11,7 @@ message Config {
   // index_directory is the absolute or home-relative directory where
   // org-search stores its disposable search index cache.
   optional string index_directory = 2;
+  // excluded_directory_names skips any reachable subtree whose visible
+  // directory name matches one of these configured names.
+  repeated string excluded_directory_names = 3;
 }

@@ -29,8 +29,11 @@ type Config struct {
 	// index_directory is the absolute or home-relative directory where
 	// org-search stores its disposable search index cache.
 	IndexDirectory *string `protobuf:"bytes,2,opt,name=index_directory,json=indexDirectory,proto3,oneof" json:"index_directory,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// excluded_directory_names skips any reachable subtree whose visible
+	// directory name matches one of these configured names.
+	ExcludedDirectoryNames []string `protobuf:"bytes,3,rep,name=excluded_directory_names,json=excludedDirectoryNames,proto3" json:"excluded_directory_names,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *Config) Reset() {
@@ -77,15 +80,23 @@ func (x *Config) GetIndexDirectory() string {
 	return ""
 }
 
+func (x *Config) GetExcludedDirectoryNames() []string {
+	if x != nil {
+		return x.ExcludedDirectoryNames
+	}
+	return nil
+}
+
 var File_orgsearch_config_proto protoreflect.FileDescriptor
 
 const file_orgsearch_config_proto_rawDesc = "" +
 	"\n" +
-	"\x16orgsearch/config.proto\x12\x10orgsearch.config\"}\n" +
+	"\x16orgsearch/config.proto\x12\x10orgsearch.config\"\xb7\x01\n" +
 	"\x06Config\x12\"\n" +
 	"\n" +
 	"notes_root\x18\x01 \x01(\tH\x00R\tnotesRoot\x88\x01\x01\x12,\n" +
-	"\x0findex_directory\x18\x02 \x01(\tH\x01R\x0eindexDirectory\x88\x01\x01B\r\n" +
+	"\x0findex_directory\x18\x02 \x01(\tH\x01R\x0eindexDirectory\x88\x01\x01\x128\n" +
+	"\x18excluded_directory_names\x18\x03 \x03(\tR\x16excludedDirectoryNamesB\r\n" +
 	"\v_notes_rootB\x12\n" +
 	"\x10_index_directoryB+Z)org-search/internal/gen/configpb;configpbb\x06proto3"
 

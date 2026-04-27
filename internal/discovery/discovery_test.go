@@ -20,7 +20,7 @@ func TestDiscoverFollowsReachableSymlinkedDirectoriesAndFilesWithoutDuplicates(t
 	mustSymlink(t, outsideDir, filepath.Join(rootDir, "outside-link"))
 	mustSymlink(t, sharedTargetPath, filepath.Join(rootDir, "shared-link.org"))
 
-	result, err := Discover(rootDir)
+	result, err := Discover(rootDir, Options{})
 	if err != nil {
 		t.Fatalf("discover notes root: %v", err)
 	}
@@ -51,7 +51,7 @@ func TestDiscoverAvoidsSymlinkLoops(t *testing.T) {
 	insidePath := writeTestFile(t, filepath.Join(loopTarget, "inside.org"))
 	mustSymlink(t, rootDir, filepath.Join(loopTarget, "back-to-root"))
 
-	result, err := Discover(rootDir)
+	result, err := Discover(rootDir, Options{})
 	if err != nil {
 		t.Fatalf("discover notes root: %v", err)
 	}
@@ -89,7 +89,7 @@ func TestDiscoverSurfacesBrokenSymlinksAndUnreadableReachablePaths(t *testing.T)
 		_ = os.Chmod(lockedDirPath, 0o755)
 	}()
 
-	result, err := Discover(rootDir)
+	result, err := Discover(rootDir, Options{})
 	if err != nil {
 		t.Fatalf("discover notes root: %v", err)
 	}
@@ -101,6 +101,28 @@ func TestDiscoverSurfacesBrokenSymlinksAndUnreadableReachablePaths(t *testing.T)
 	assertWarningPathContains(t, result.Warnings, filepath.Join(rootDir, "broken.org"), "resolve symlinks")
 	assertWarningPathContains(t, result.Warnings, unreadableFilePath, "open file")
 	assertWarningPathContains(t, result.Warnings, filepath.Join(rootDir, "locked"), "read directory")
+}
+
+func TestDiscoverSkipsExcludedDirectoriesByVisibleName(t *testing.T) {
+	t.Helper()
+
+	rootDir := t.TempDir()
+	keptPath := writeTestFile(t, filepath.Join(rootDir, "included", "keep.org"))
+	writeTestFile(t, filepath.Join(rootDir, "excluded-one", "skip.org"))
+
+	linkedTargetDir := t.TempDir()
+	writeTestFile(t, filepath.Join(linkedTargetDir, "linked.org"))
+	mustSymlink(t, linkedTargetDir, filepath.Join(rootDir, "excluded-two"))
+
+	result, err := Discover(rootDir, Options{ExcludedDirectoryNames: []string{"excluded-one", "excluded-two"}})
+	if err != nil {
+		t.Fatalf("discover notes root: %v", err)
+	}
+
+	if len(result.Warnings) != 0 {
+		t.Fatalf("warnings = %+v, want none", result.Warnings)
+	}
+	assertSamePaths(t, result.Paths, []string{keptPath})
 }
 
 func TestCanonicalizePathResolvesMissingLeafThroughExistingParentSymlinks(t *testing.T) {
