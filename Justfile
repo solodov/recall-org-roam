@@ -31,10 +31,21 @@ generate-proto:
 
     protoc "${include_args[@]}" --go_out=. --go_opt=module={{module}} "${proto_files[@]}"
 
+[script]
 build: generate-proto
     mkdir -p dist
     go build ./...
     go build -o "dist/{{binary}}" "./cmd/{{binary}}"
+
+    if [[ -f emacs/org-bleve-index.el ]]; then
+      if ! command -v emacs >/dev/null 2>&1; then
+        echo "emacs is required to build the Emacs package" >&2
+        exit 1
+      fi
+
+      emacs --batch -Q -L emacs -f batch-byte-compile emacs/org-bleve-index.el
+      rm -f emacs/org-bleve-index.elc
+    fi
 
 [script]
 lint *paths:
@@ -51,9 +62,25 @@ lint *paths:
 
 [script]
 test *paths: generate-proto
+    should_run_emacs_tests_for_path() {
+      local candidate="$1"
+      case "$candidate" in
+        .|./.|emacs|./emacs|emacs/*|./emacs/*|*.el|./*.el)
+          return 0
+          ;;
+        *)
+          return 1
+          ;;
+      esac
+    }
+
     add_package() {
       local candidate="$1"
       local package_path
+
+      if should_run_emacs_tests_for_path "$candidate"; then
+        return
+      fi
 
       if [[ "$candidate" == . || "$candidate" == "./." ]]; then
         package_path="./..."
@@ -86,17 +113,41 @@ test *paths: generate-proto
 
     declare -A seen=()
     packages=()
+    run_go_tests=false
+    run_emacs_tests=false
+
+    if (($# == 0)); then
+      run_go_tests=true
+      run_emacs_tests=true
+    fi
 
     for path in "$@"; do
+      if should_run_emacs_tests_for_path "$path"; then
+        run_emacs_tests=true
+      fi
       add_package "$path"
     done
 
-    if ((${#packages[@]} == 0)); then
-      go test ./...
-      exit 0
+    if ((${#packages[@]} > 0)); then
+      run_go_tests=true
     fi
 
-    go test "${packages[@]}"
+    if [[ "$run_go_tests" == true ]]; then
+      if ((${#packages[@]} == 0)); then
+        go test ./...
+      else
+        go test "${packages[@]}"
+      fi
+    fi
+
+    if [[ "$run_emacs_tests" == true ]]; then
+      if ! command -v emacs >/dev/null 2>&1; then
+        echo "emacs is required to run Emacs package tests" >&2
+        exit 1
+      fi
+
+      emacs --batch -Q -L emacs -l emacs/org-bleve-index-test.el -f ert-run-tests-batch-and-exit
+    fi
 
 [script]
 run *args: build

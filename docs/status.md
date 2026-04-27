@@ -19,10 +19,10 @@ This file tracks plans managed in the markdown-backed layout.
 ### [20260426-212226-org-bleve-index-save-time](./20260426-212226-org-bleve-index-save-time.md)
 - title: org-bleve-index save-time Bleve sync with quiet updates and actionable diagnostics
 - status: implementing
-- currentPhase: 1
-- currentPhaseTitle: Establish an editor-safe update-file --json contract in org-search
-- nextPhase: 2
-- nextPhaseTitle: Introduce org-bleve-index as a maintenance-only Emacs package
+- currentPhase: 2
+- currentPhaseTitle: Introduce org-bleve-index as a maintenance-only Emacs package
+- nextPhase: 3
+- nextPhaseTitle: Use broad save-hook coverage with asynchronous per-file process management
 - totalPhases: 5
 - updated: 2026-04-27
 
