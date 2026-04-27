@@ -113,6 +113,46 @@ func TestSearchCleansUpStaleFileDocuments(t *testing.T) {
 	}
 }
 
+func TestUpdateFileReportsAllConflictingIDsAgainstExistingIndex(t *testing.T) {
+	t.Helper()
+
+	indexDir := filepath.Join(t.TempDir(), "index")
+	existingOnePath := writeIndexFile(t, filepath.Join(t.TempDir(), "existing-one.org"))
+	existingTwoPath := writeIndexFile(t, filepath.Join(t.TempDir(), "existing-two.org"))
+	targetPath := writeIndexFile(t, filepath.Join(t.TempDir(), "target.org"))
+	if err := Rebuild(indexDir, []projection.EntryDocument{
+		{ID: "shared-id", Path: existingOnePath, Headline: "Existing One", Body: "alpha"},
+		{ID: "another-id", Path: existingTwoPath, Headline: "Existing Two", Body: "bravo"},
+	}); err != nil {
+		t.Fatalf("rebuild index: %v", err)
+	}
+
+	_, err := UpdateFile(indexDir, targetPath, []projection.EntryDocument{
+		{ID: "shared-id", Path: targetPath, Headline: "Target One", Body: "charlie"},
+		{ID: "another-id", Path: targetPath, Headline: "Target Two", Body: "delta"},
+	})
+	if err == nil {
+		t.Fatal("expected duplicate ID error")
+	}
+
+	var duplicateErr projection.DuplicateIDsError
+	if !errors.As(err, &duplicateErr) {
+		t.Fatalf("expected DuplicateIDsError, got %v", err)
+	}
+	assertDuplicateIDs(t, duplicateErr, []projection.DuplicateID{
+		{ID: "shared-id", Occurrences: []projection.DuplicateIDOccurrence{{Path: existingOnePath, Headline: "Existing One"}, {Path: targetPath, Headline: "Target One"}}},
+		{ID: "another-id", Occurrences: []projection.DuplicateIDOccurrence{{Path: existingTwoPath, Headline: "Existing Two"}, {Path: targetPath, Headline: "Target Two"}}},
+	})
+
+	hits, searchErr := Search(indexDir, "alpha")
+	if searchErr != nil {
+		t.Fatalf("search existing content after duplicate rejection: %v", searchErr)
+	}
+	if len(hits) != 1 || hits[0].ID != "shared-id" {
+		t.Fatalf("hits = %+v, want existing shared-id to remain indexed", hits)
+	}
+}
+
 func TestSearchPassesThroughBleveQueryStringSemantics(t *testing.T) {
 	t.Helper()
 
@@ -162,4 +202,25 @@ func writeIndexFile(t *testing.T, path string) string {
 		t.Fatalf("write file %q: %v", path, err)
 	}
 	return path
+}
+
+func assertDuplicateIDs(t *testing.T, got projection.DuplicateIDsError, want []projection.DuplicateID) {
+	t.Helper()
+
+	if len(got.Duplicates) != len(want) {
+		t.Fatalf("duplicates = %+v, want %+v", got.Duplicates, want)
+	}
+	for index := range want {
+		if got.Duplicates[index].ID != want[index].ID {
+			t.Fatalf("duplicates = %+v, want %+v", got.Duplicates, want)
+		}
+		if len(got.Duplicates[index].Occurrences) != len(want[index].Occurrences) {
+			t.Fatalf("duplicates = %+v, want %+v", got.Duplicates, want)
+		}
+		for occurrenceIndex := range want[index].Occurrences {
+			if got.Duplicates[index].Occurrences[occurrenceIndex] != want[index].Occurrences[occurrenceIndex] {
+				t.Fatalf("duplicates = %+v, want %+v", got.Duplicates, want)
+			}
+		}
+	}
 }

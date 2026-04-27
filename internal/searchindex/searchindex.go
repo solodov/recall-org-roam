@@ -70,14 +70,18 @@ func UpdateFile(indexDirectory string, path string, documents []projection.Entry
 		_ = index.Close()
 	}()
 
+	if err := cleanupMissingPaths(index, path); err != nil {
+		return UpdateResult{}, err
+	}
+	if err := rejectConflictingIDs(index, path, documents); err != nil {
+		return UpdateResult{}, err
+	}
+
 	deletedEntryCount, err := deleteDocumentsByPath(index, path)
 	if err != nil {
 		return UpdateResult{}, err
 	}
 	if err := indexDocuments(index, documents); err != nil {
-		return UpdateResult{}, err
-	}
-	if err := cleanupMissingPaths(index); err != nil {
 		return UpdateResult{}, err
 	}
 	return UpdateResult{DeletedEntryCount: deletedEntryCount, IndexedEntryCount: len(documents)}, nil
@@ -93,7 +97,7 @@ func Search(indexDirectory string, rawQuery string) ([]SearchHit, error) {
 		_ = index.Close()
 	}()
 
-	if err := cleanupMissingPaths(index); err != nil {
+	if err := cleanupMissingPaths(index, ""); err != nil {
 		return nil, err
 	}
 
@@ -147,12 +151,15 @@ func indexDocuments(index bleve.Index, documents []projection.EntryDocument) err
 	return nil
 }
 
-func cleanupMissingPaths(index bleve.Index) error {
+func cleanupMissingPaths(index bleve.Index, skippedPath string) error {
 	paths, err := collectIndexedPaths(index)
 	if err != nil {
 		return err
 	}
 	for _, path := range paths {
+		if path == skippedPath {
+			continue
+		}
 		if _, err := os.Stat(path); err == nil {
 			continue
 		} else if !os.IsNotExist(err) {
@@ -161,6 +168,33 @@ func cleanupMissingPaths(index bleve.Index) error {
 		if _, err := deleteDocumentsByPath(index, path); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func rejectConflictingIDs(index bleve.Index, targetPath string, documents []projection.EntryDocument) error {
+	duplicates := make([]projection.DuplicateID, 0)
+	for _, document := range documents {
+		occurrences, err := collectIndexedOccurrencesByID(index, document.ID)
+		if err != nil {
+			return fmt.Errorf("find indexed documents for duplicate ID %q: %w", document.ID, err)
+		}
+
+		conflicts := make([]projection.DuplicateIDOccurrence, 0, len(occurrences)+1)
+		for _, occurrence := range occurrences {
+			if occurrence.Path == targetPath {
+				continue
+			}
+			conflicts = append(conflicts, occurrence)
+		}
+		if len(conflicts) == 0 {
+			continue
+		}
+		conflicts = append(conflicts, projection.DuplicateIDOccurrence{Path: document.Path, Headline: document.Headline})
+		duplicates = append(duplicates, projection.DuplicateID{ID: document.ID, Occurrences: conflicts})
+	}
+	if len(duplicates) > 0 {
+		return projection.DuplicateIDsError{Duplicates: duplicates}
 	}
 	return nil
 }
@@ -206,6 +240,28 @@ func deleteDocumentsByPath(index bleve.Index, path string) (int, error) {
 		return 0, fmt.Errorf("delete indexed documents for %q: %w", path, err)
 	}
 	return len(ids), nil
+}
+
+func collectIndexedOccurrencesByID(index bleve.Index, id string) ([]projection.DuplicateIDOccurrence, error) {
+	query := bleve.NewTermQuery(id)
+	query.SetField("id")
+	occurrences := make([]projection.DuplicateIDOccurrence, 0)
+	for from := 0; ; from += pageSize {
+		request := bleve.NewSearchRequestOptions(query, pageSize, from, false)
+		request.Fields = []string{"path", "headline"}
+		result, err := index.Search(request)
+		if err != nil {
+			return nil, err
+		}
+		for _, hit := range result.Hits {
+			path, _ := hit.Fields["path"].(string)
+			headline, _ := hit.Fields["headline"].(string)
+			occurrences = append(occurrences, projection.DuplicateIDOccurrence{Path: path, Headline: headline})
+		}
+		if len(result.Hits) < pageSize {
+			return occurrences, nil
+		}
+	}
 }
 
 func collectDocumentIDs(index bleve.Index, query query.Query) ([]string, error) {

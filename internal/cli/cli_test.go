@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"org-search/internal/app"
+	"org-search/internal/projection"
 )
 
 type fakeService struct {
@@ -150,6 +151,31 @@ func TestRunRendersNoMatchesHumanReadable(t *testing.T) {
 	}
 }
 
+func TestRunRendersDuplicateIDErrorsAsHumanReadableByDefault(t *testing.T) {
+	t.Helper()
+
+	service := &fakeService{rebuildError: projection.DuplicateIDsError{Duplicates: []projection.DuplicateID{{
+		ID:          "another-id",
+		Occurrences: []projection.DuplicateIDOccurrence{{Path: "/notes/one.org", Headline: "One"}, {Path: "/notes/two.org", Headline: "Two"}},
+	}, {
+		ID:          "shared-id",
+		Occurrences: []projection.DuplicateIDOccurrence{{Path: "/notes/three.org", Headline: "Three"}, {Path: "/notes/four.org", Headline: "Four"}},
+	}}}}
+	var stdout strings.Builder
+	var stderr strings.Builder
+
+	exitCode := Run(context.Background(), []string{"rebuild"}, &stdout, &stderr, service)
+	if exitCode != 1 {
+		t.Fatalf("exitCode = %d, want 1", exitCode)
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty", stdout.String())
+	}
+	if got, want := stderr.String(), "Error: found 2 duplicate Org IDs\n- another-id\n  - /notes/one.org: One\n  - /notes/two.org: Two\n- shared-id\n  - /notes/three.org: Three\n  - /notes/four.org: Four\n"; got != want {
+		t.Fatalf("stderr = %q, want %q", got, want)
+	}
+}
+
 func TestRunRendersErrorsAsHumanReadableByDefault(t *testing.T) {
 	t.Helper()
 
@@ -165,6 +191,25 @@ func TestRunRendersErrorsAsHumanReadableByDefault(t *testing.T) {
 		t.Fatalf("stdout = %q, want empty", stdout.String())
 	}
 	if got, want := stderr.String(), "Error: boom\n"; got != want {
+		t.Fatalf("stderr = %q, want %q", got, want)
+	}
+}
+
+func TestRunRendersDuplicateIDErrorsAsJSONWithFlag(t *testing.T) {
+	t.Helper()
+
+	service := &fakeService{rebuildError: projection.DuplicateIDsError{Duplicates: []projection.DuplicateID{{ID: "shared-id", Occurrences: []projection.DuplicateIDOccurrence{{Path: "/notes/one.org", Headline: "One"}, {Path: "/notes/two.org", Headline: "Two"}}}}}}
+	var stdout strings.Builder
+	var stderr strings.Builder
+
+	exitCode := Run(context.Background(), []string{"--json", "rebuild"}, &stdout, &stderr, service)
+	if exitCode != 1 {
+		t.Fatalf("exitCode = %d, want 1", exitCode)
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty", stdout.String())
+	}
+	if got, want := stderr.String(), "{\"error\":\"found 1 duplicate org IDs: \\\"shared-id\\\" in /notes/one.org, /notes/two.org\",\"duplicates\":[{\"id\":\"shared-id\",\"occurrences\":[{\"path\":\"/notes/one.org\",\"headline\":\"One\"},{\"path\":\"/notes/two.org\",\"headline\":\"Two\"}]}]}\n"; got != want {
 		t.Fatalf("stderr = %q, want %q", got, want)
 	}
 }

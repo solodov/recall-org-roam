@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 
 	goorg "github.com/niklasfasching/go-org/org"
@@ -20,15 +21,37 @@ type EntryDocument struct {
 	Body     string
 }
 
-// DuplicateIDError reports that two reachable entries declared the same Org ID.
-type DuplicateIDError struct {
-	ID         string
-	FirstPath  string
-	SecondPath string
+// DuplicateIDOccurrence stores one duplicate Org ID occurrence that the operator can inspect and fix.
+type DuplicateIDOccurrence struct {
+	Path     string `json:"path"`
+	Headline string `json:"headline,omitempty"`
 }
 
-func (err DuplicateIDError) Error() string {
-	return fmt.Sprintf("duplicate org ID %q in %q and %q", err.ID, err.FirstPath, err.SecondPath)
+// DuplicateID stores every occurrence for one duplicate Org ID.
+type DuplicateID struct {
+	ID          string                  `json:"id"`
+	Occurrences []DuplicateIDOccurrence `json:"occurrences"`
+}
+
+// DuplicateIDsError reports every duplicate Org ID found while projecting one or more files.
+type DuplicateIDsError struct {
+	Duplicates []DuplicateID `json:"duplicates"`
+}
+
+func (err DuplicateIDsError) Error() string {
+	if len(err.Duplicates) == 0 {
+		return "found duplicate org IDs"
+	}
+
+	parts := make([]string, 0, len(err.Duplicates))
+	for _, duplicate := range err.Duplicates {
+		paths := make([]string, 0, len(duplicate.Occurrences))
+		for _, occurrence := range duplicate.Occurrences {
+			paths = append(paths, occurrence.Path)
+		}
+		parts = append(parts, fmt.Sprintf("%q in %s", duplicate.ID, strings.Join(paths, ", ")))
+	}
+	return fmt.Sprintf("found %d duplicate org IDs: %s", len(err.Duplicates), strings.Join(parts, "; "))
 }
 
 // ProjectFile projects one Org file into entry documents keyed by Org ID.
@@ -36,11 +59,11 @@ func ProjectFile(path string) ([]EntryDocument, error) {
 	return ProjectPaths([]string{path})
 }
 
-// ProjectPaths projects one corpus-worth of Org files and rejects duplicate Org IDs.
+// ProjectPaths projects one corpus-worth of Org files and rejects every duplicate Org ID it finds.
 func ProjectPaths(paths []string) ([]EntryDocument, error) {
 	projected := make([]EntryDocument, 0)
 	seenPaths := make(map[string]struct{}, len(paths))
-	seenIDs := make(map[string]string)
+	occurrencesByID := make(map[string][]DuplicateIDOccurrence)
 	for _, path := range paths {
 		canonicalPath, err := discovery.CanonicalizePath(path)
 		if err != nil {
@@ -56,12 +79,14 @@ func ProjectPaths(paths []string) ([]EntryDocument, error) {
 			return nil, err
 		}
 		for _, document := range fileDocuments {
-			if firstPath, exists := seenIDs[document.ID]; exists {
-				return nil, DuplicateIDError{ID: document.ID, FirstPath: firstPath, SecondPath: document.Path}
-			}
-			seenIDs[document.ID] = document.Path
 			projected = append(projected, document)
+			occurrencesByID[document.ID] = append(occurrencesByID[document.ID], DuplicateIDOccurrence{Path: document.Path, Headline: document.Headline})
 		}
+	}
+
+	duplicates := collectDuplicateIDs(occurrencesByID)
+	if len(duplicates) > 0 {
+		return nil, DuplicateIDsError{Duplicates: duplicates}
 	}
 	return projected, nil
 }
@@ -115,4 +140,25 @@ func filterDirectBodyNodes(nodes []goorg.Node) []goorg.Node {
 		filtered = append(filtered, node)
 	}
 	return filtered
+}
+
+func collectDuplicateIDs(occurrencesByID map[string][]DuplicateIDOccurrence) []DuplicateID {
+	duplicates := make([]DuplicateID, 0)
+	for id, occurrences := range occurrencesByID {
+		if len(occurrences) < 2 {
+			continue
+		}
+		sortedOccurrences := append([]DuplicateIDOccurrence(nil), occurrences...)
+		sort.Slice(sortedOccurrences, func(left int, right int) bool {
+			if sortedOccurrences[left].Path == sortedOccurrences[right].Path {
+				return sortedOccurrences[left].Headline < sortedOccurrences[right].Headline
+			}
+			return sortedOccurrences[left].Path < sortedOccurrences[right].Path
+		})
+		duplicates = append(duplicates, DuplicateID{ID: id, Occurrences: sortedOccurrences})
+	}
+	sort.Slice(duplicates, func(left int, right int) bool {
+		return duplicates[left].ID < duplicates[right].ID
+	})
+	return duplicates
 }

@@ -2,10 +2,12 @@ package cli
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 
 	"org-search/internal/app"
+	"org-search/internal/projection"
 )
 
 func writeResult(writer io.Writer, value any, jsonOutput bool) error {
@@ -65,11 +67,40 @@ func writeHumanSearch(writer io.Writer, response app.SearchResponse) error {
 }
 
 func writeError(writer io.Writer, err error, jsonOutput bool) {
+	var duplicateErr projection.DuplicateIDsError
+	if errors.As(err, &duplicateErr) {
+		if jsonOutput {
+			_ = writeJSON(writer, duplicateIDsErrorResponse{Error: duplicateErr.Error(), Duplicates: duplicateErr.Duplicates})
+			return
+		}
+		writeHumanDuplicateIDError(writer, duplicateErr)
+		return
+	}
+
 	if jsonOutput {
 		_ = writeJSON(writer, map[string]string{"error": err.Error()})
 		return
 	}
 	_, _ = fmt.Fprintf(writer, "Error: %s\n", err)
+}
+
+func writeHumanDuplicateIDError(writer io.Writer, err projection.DuplicateIDsError) {
+	_, _ = fmt.Fprintf(writer, "Error: found %d duplicate Org IDs\n", len(err.Duplicates))
+	for _, duplicate := range err.Duplicates {
+		_, _ = fmt.Fprintf(writer, "- %s\n", duplicate.ID)
+		for _, occurrence := range duplicate.Occurrences {
+			if occurrence.Headline == "" {
+				_, _ = fmt.Fprintf(writer, "  - %s\n", occurrence.Path)
+				continue
+			}
+			_, _ = fmt.Fprintf(writer, "  - %s: %s\n", occurrence.Path, occurrence.Headline)
+		}
+	}
+}
+
+type duplicateIDsErrorResponse struct {
+	Error      string                   `json:"error"`
+	Duplicates []projection.DuplicateID `json:"duplicates"`
 }
 
 func writeJSON(writer io.Writer, value any) error {

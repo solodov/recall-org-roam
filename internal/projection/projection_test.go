@@ -92,7 +92,7 @@ Body.
 	}
 }
 
-func TestProjectFileRejectsDuplicateIDsWithinOneFile(t *testing.T) {
+func TestProjectFileReportsAllDuplicateIDsWithinOneFile(t *testing.T) {
 	t.Helper()
 
 	orgPath := filepath.Join(t.TempDir(), "duplicates.org")
@@ -107,6 +107,18 @@ First body.
 :ID: shared-id
 :END:
 Second body.
+
+* Three
+:PROPERTIES:
+:ID: another-id
+:END:
+Third body.
+
+* Four
+:PROPERTIES:
+:ID: another-id
+:END:
+Fourth body.
 `)
 
 	_, err := ProjectFile(orgPath)
@@ -114,25 +126,30 @@ Second body.
 		t.Fatal("expected duplicate ID error")
 	}
 
-	var duplicateErr DuplicateIDError
-	if !errors.As(err, &duplicateErr) {
-		t.Fatalf("expected DuplicateIDError, got %v", err)
-	}
-	if got, want := duplicateErr.ID, "shared-id"; got != want {
-		t.Fatalf("duplicate ID = %q, want %q", got, want)
-	}
+	duplicates := mustDuplicateIDsError(t, err)
+	assertDuplicateIDs(t, duplicates, []DuplicateID{
+		{ID: "another-id", Occurrences: []DuplicateIDOccurrence{{Path: mustCanonicalPath(t, orgPath), Headline: "Four"}, {Path: mustCanonicalPath(t, orgPath), Headline: "Three"}}},
+		{ID: "shared-id", Occurrences: []DuplicateIDOccurrence{{Path: mustCanonicalPath(t, orgPath), Headline: "One"}, {Path: mustCanonicalPath(t, orgPath), Headline: "Two"}}},
+	})
 }
 
-func TestProjectPathsRejectsDuplicateIDsAcrossFiles(t *testing.T) {
+func TestProjectPathsReportsAllDuplicateIDsAcrossFiles(t *testing.T) {
 	t.Helper()
 
 	firstPath := filepath.Join(t.TempDir(), "first.org")
 	secondPath := filepath.Join(t.TempDir(), "second.org")
+	thirdPath := filepath.Join(t.TempDir(), "third.org")
 	writeOrgFile(t, firstPath, `* One
 :PROPERTIES:
 :ID: shared-id
 :END:
 First body.
+
+* Extra One
+:PROPERTIES:
+:ID: another-id
+:END:
+Body.
 `)
 	writeOrgFile(t, secondPath, `* Two
 :PROPERTIES:
@@ -140,21 +157,56 @@ First body.
 :END:
 Second body.
 `)
+	writeOrgFile(t, thirdPath, `* Three
+:PROPERTIES:
+:ID: another-id
+:END:
+Third body.
+`)
 
-	_, err := ProjectPaths([]string{firstPath, secondPath})
+	_, err := ProjectPaths([]string{firstPath, secondPath, thirdPath})
 	if err == nil {
 		t.Fatal("expected duplicate ID error")
 	}
 
-	var duplicateErr DuplicateIDError
+	duplicates := mustDuplicateIDsError(t, err)
+	assertDuplicateIDs(t, duplicates, []DuplicateID{
+		{ID: "another-id", Occurrences: []DuplicateIDOccurrence{{Path: mustCanonicalPath(t, firstPath), Headline: "Extra One"}, {Path: mustCanonicalPath(t, thirdPath), Headline: "Three"}}},
+		{ID: "shared-id", Occurrences: []DuplicateIDOccurrence{{Path: mustCanonicalPath(t, firstPath), Headline: "One"}, {Path: mustCanonicalPath(t, secondPath), Headline: "Two"}}},
+	})
+	if !strings.Contains(err.Error(), "another-id") || !strings.Contains(err.Error(), "shared-id") {
+		t.Fatalf("error = %q, want all duplicate IDs in summary", err.Error())
+	}
+}
+
+func mustDuplicateIDsError(t *testing.T, err error) DuplicateIDsError {
+	t.Helper()
+
+	var duplicateErr DuplicateIDsError
 	if !errors.As(err, &duplicateErr) {
-		t.Fatalf("expected DuplicateIDError, got %v", err)
+		t.Fatalf("expected DuplicateIDsError, got %v", err)
 	}
-	if got, want := duplicateErr.FirstPath, mustCanonicalPath(t, firstPath); got != want {
-		t.Fatalf("firstPath = %q, want %q", got, want)
+	return duplicateErr
+}
+
+func assertDuplicateIDs(t *testing.T, got DuplicateIDsError, want []DuplicateID) {
+	t.Helper()
+
+	if len(got.Duplicates) != len(want) {
+		t.Fatalf("duplicates = %+v, want %+v", got.Duplicates, want)
 	}
-	if got, want := duplicateErr.SecondPath, mustCanonicalPath(t, secondPath); got != want {
-		t.Fatalf("secondPath = %q, want %q", got, want)
+	for index := range want {
+		if got.Duplicates[index].ID != want[index].ID {
+			t.Fatalf("duplicates = %+v, want %+v", got.Duplicates, want)
+		}
+		if len(got.Duplicates[index].Occurrences) != len(want[index].Occurrences) {
+			t.Fatalf("duplicates = %+v, want %+v", got.Duplicates, want)
+		}
+		for occurrenceIndex := range want[index].Occurrences {
+			if got.Duplicates[index].Occurrences[occurrenceIndex] != want[index].Occurrences[occurrenceIndex] {
+				t.Fatalf("duplicates = %+v, want %+v", got.Duplicates, want)
+			}
+		}
 	}
 }
 
