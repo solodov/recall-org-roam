@@ -73,10 +73,10 @@ func TestProjectFileIndexesScheduledAndDeadlinePlanningMetadata(t *testing.T) {
 
 	orgPath := filepath.Join(t.TempDir(), "planning.org")
 	writeOrgFile(t, orgPath, `* TODO Planned
+CLOSED: [2026-04-27 Mon 18:00] SCHEDULED: <2026-04-28 Tue 09:15> DEADLINE: <2026-04-29 Wed>
 :PROPERTIES:
 :ID: planned-id
 :END:
-CLOSED: [2026-04-27 Mon 18:00] SCHEDULED: <2026-04-28 Tue 09:15> DEADLINE: <2026-04-29 Wed>
 Body.
 `)
 
@@ -98,6 +98,9 @@ Body.
 	}
 	if documents[0].DeadlineMinuteOfDay != nil {
 		t.Fatalf("deadlineMinuteOfDay = %v, want nil for date-only deadline", *documents[0].DeadlineMinuteOfDay)
+	}
+	if strings.Contains(documents[0].Body, ":PROPERTIES:") {
+		t.Fatalf("body = %q, want property drawer metadata excluded from indexed body", documents[0].Body)
 	}
 }
 

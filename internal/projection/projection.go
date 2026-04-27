@@ -128,8 +128,9 @@ func collectSectionDocuments(section *goorg.Section, visiblePath string, canonic
 	}
 
 	directBodyNodes := filterDirectBodyNodes(section.Headline.Children)
+	properties, directBodyNodes := extractSectionProperties(section.Headline.Properties, directBodyNodes)
 	planning := extractPlanningMetadata(directBodyNodes)
-	if id, ok := section.Headline.Properties.Get("ID"); ok {
+	if id, ok := properties.Get("ID"); ok {
 		trimmedID := strings.TrimSpace(id)
 		if trimmedID != "" {
 			*projected = append(*projected, EntryDocument{
@@ -150,6 +151,23 @@ func collectSectionDocuments(section *goorg.Section, visiblePath string, canonic
 	for _, child := range section.Children {
 		collectSectionDocuments(child, visiblePath, canonicalPath, projected)
 	}
+}
+
+func extractSectionProperties(headlineProperties *goorg.PropertyDrawer, nodes []goorg.Node) (*goorg.PropertyDrawer, []goorg.Node) {
+	properties := headlineProperties
+	filtered := make([]goorg.Node, 0, len(nodes))
+	for _, node := range nodes {
+		drawer, ok := node.(goorg.PropertyDrawer)
+		if !ok {
+			filtered = append(filtered, node)
+			continue
+		}
+		if properties == nil {
+			drawerCopy := drawer
+			properties = &drawerCopy
+		}
+	}
+	return properties, filtered
 }
 
 func extractPlanningMetadata(nodes []goorg.Node) planningMetadata {
