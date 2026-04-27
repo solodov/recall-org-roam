@@ -63,6 +63,54 @@ alphabody
 	}
 }
 
+func TestNewServiceSearchFindsFileRootIDAsEntryAndAncestor(t *testing.T) {
+	t.Helper()
+
+	rootDir := t.TempDir()
+	notesRoot := filepath.Join(rootDir, "notes")
+	indexDirectory := filepath.Join(rootDir, "index")
+	writeOrgFile(t, filepath.Join(notesRoot, "entry.org"), `:PROPERTIES:
+:ID: file-id
+:END:
+#+TITLE: File Root
+
+* Child
+:PROPERTIES:
+:ID: child-id
+:END:
+needle
+`)
+
+	configPath := filepath.Join(rootDir, "config.txtpb")
+	writeConfigFile(t, configPath, "notes_root: \""+notesRoot+"\"\nindex_directory: \""+indexDirectory+"\"")
+
+	service := NewService()
+	if _, err := service.Rebuild(context.Background(), RebuildRequest{ConfigPath: configPath}); err != nil {
+		t.Fatalf("rebuild index: %v", err)
+	}
+
+	searchResult, err := service.Search(context.Background(), SearchRequest{ConfigPath: configPath, Query: "id:file-id"})
+	if err != nil {
+		t.Fatalf("search file root ID: %v", err)
+	}
+	searchResponse := searchResult.(SearchResponse)
+	if len(searchResponse.Hits) != 1 || searchResponse.Hits[0].ID != "file-id" {
+		t.Fatalf("file root hits = %+v, want file-id", searchResponse.Hits)
+	}
+
+	searchResult, err = service.Search(context.Background(), SearchRequest{ConfigPath: configPath, Query: "ancestor_id:file-id"})
+	if err != nil {
+		t.Fatalf("search file root ancestor_id: %v", err)
+	}
+	searchResponse = searchResult.(SearchResponse)
+	if len(searchResponse.Hits) != 1 || searchResponse.Hits[0].ID != "child-id" {
+		t.Fatalf("ancestor hits = %+v, want child-id", searchResponse.Hits)
+	}
+	if got, want := searchResponse.Hits[0].ParentID, "file-id"; got != want {
+		t.Fatalf("parentID = %q, want %q", got, want)
+	}
+}
+
 func TestNewServiceSearchReturnsParentIDsAncestorIDsAndOutline(t *testing.T) {
 	t.Helper()
 

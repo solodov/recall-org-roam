@@ -172,6 +172,58 @@ Body.
 	}
 }
 
+func TestProjectFileProjectsFileRootIDAsEntryAndParentContext(t *testing.T) {
+	t.Helper()
+
+	orgPath := filepath.Join(t.TempDir(), "root-entry.org")
+	writeOrgFile(t, orgPath, `:PROPERTIES:
+:ID: file-id
+:END:
+#+TITLE: File Root
+#+FILETAGS: :file_tag:
+
+Intro body.
+
+* Child
+:PROPERTIES:
+:ID: child-id
+:END:
+Body.
+`)
+
+	documents, err := ProjectFile(orgPath, taghierarchy.Hierarchy{})
+	if err != nil {
+		t.Fatalf("project file: %v", err)
+	}
+	if len(documents) != 2 {
+		t.Fatalf("documents = %+v, want 2 projected entries", documents)
+	}
+	if got, want := documents[0].ID, "file-id"; got != want {
+		t.Fatalf("file root ID = %q, want %q", got, want)
+	}
+	if got, want := documents[0].Headline, "File Root"; got != want {
+		t.Fatalf("file root headline = %q, want %q", got, want)
+	}
+	if got, want := documents[0].Outline, "File Root"; got != want {
+		t.Fatalf("file root outline = %q, want %q", got, want)
+	}
+	if got, want := documents[0].Tags, []string{"file_tag"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("file root tags = %#v, want %#v", got, want)
+	}
+	if !strings.Contains(documents[0].Body, "Intro body.") {
+		t.Fatalf("file root body = %q, want intro body text", documents[0].Body)
+	}
+	if got, want := documents[1].ParentID, "file-id"; got != want {
+		t.Fatalf("child parentID = %q, want %q", got, want)
+	}
+	if got, want := documents[1].AncestorIDs, []string{"file-id"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("child ancestorIDs = %#v, want %#v", got, want)
+	}
+	if got, want := documents[1].Outline, "File Root / Child"; got != want {
+		t.Fatalf("child outline = %q, want %q", got, want)
+	}
+}
+
 func TestProjectFileInheritsArchivedStateFromArchiveTag(t *testing.T) {
 	t.Helper()
 

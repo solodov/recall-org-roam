@@ -129,10 +129,48 @@ func projectCanonicalFile(canonicalPath string, visiblePath string, hierarchy ta
 	doneKeywords := collectDoneKeywords(todoKeywordSetting(document))
 	fileCategory := fileCategory(document)
 	fileTags := parseFileTags(bufferSetting(document, "FILETAGS"))
+	rootEntry, rootContext := projectFileRootEntry(document, visiblePath, canonicalPath, fileCategory, fileTags, hierarchy)
+	if rootEntry.ID != "" {
+		projected = append(projected, rootEntry)
+	}
 	for _, section := range document.Outline.Children {
-		collectSectionDocuments(section, visiblePath, canonicalPath, fileCategory, fileTags, false, todoKeywords, doneKeywords, hierarchy, nil, nil, "", &projected)
+		collectSectionDocuments(section, visiblePath, canonicalPath, fileCategory, fileTags, false, todoKeywords, doneKeywords, hierarchy, rootContext.outline, rootContext.ancestorIDs, rootContext.parentID, &projected)
 	}
 	return projected, nil
+}
+
+type hierarchyContext struct {
+	outline     []string
+	ancestorIDs []string
+	parentID    string
+}
+
+func projectFileRootEntry(document *goorg.Document, visiblePath string, canonicalPath string, category string, fileTags []string, hierarchy taghierarchy.Hierarchy) (EntryDocument, hierarchyContext) {
+	properties := fileProperties(document)
+	if properties == nil {
+		return EntryDocument{}, hierarchyContext{}
+	}
+
+	rootID, ok := properties.Get("ID")
+	rootID = strings.TrimSpace(rootID)
+	if !ok || rootID == "" {
+		return EntryDocument{}, hierarchyContext{}
+	}
+
+	headline := fileHeadline(document, visiblePath)
+	outline := []string{outlineSegment(headline)}
+	entry := EntryDocument{
+		ID:            rootID,
+		Path:          visiblePath,
+		CanonicalPath: canonicalPath,
+		Outline:       strings.Join(outline, " / "),
+		Headline:      headline,
+		IsArchived:    hasArchiveTag(fileTags),
+		Tags:          hierarchy.Expand(fileTags),
+		Category:      category,
+		Body:          fileRootBody(document),
+	}
+	return entry, hierarchyContext{outline: outline, ancestorIDs: []string{rootID}, parentID: rootID}
 }
 
 func collectSectionDocuments(section *goorg.Section, visiblePath string, canonicalPath string, inheritedCategory string, inheritedTags []string, inheritedArchived bool, todoKeywords []string, doneKeywords map[string]struct{}, hierarchy taghierarchy.Hierarchy, inheritedOutline []string, inheritedAncestorIDs []string, immediateParentID string, projected *[]EntryDocument) {
@@ -234,6 +272,42 @@ func inheritTags(inheritedTags []string, localTags []string) []string {
 	return combined
 }
 
+func fileProperties(document *goorg.Document) *goorg.PropertyDrawer {
+	for _, node := range document.Nodes {
+		switch node := node.(type) {
+		case goorg.Headline:
+			return nil
+		case goorg.PropertyDrawer:
+			drawerCopy := node
+			return &drawerCopy
+		}
+	}
+	return nil
+}
+
+func fileHeadline(document *goorg.Document, path string) string {
+	if title := strings.TrimSpace(bufferSetting(document, "TITLE")); title != "" {
+		return title
+	}
+	baseName := filepath.Base(path)
+	return strings.TrimSuffix(baseName, filepath.Ext(baseName))
+}
+
+func fileRootBody(document *goorg.Document) string {
+	bodyNodes := make([]goorg.Node, 0)
+	for _, node := range document.Nodes {
+		switch node.(type) {
+		case goorg.Headline:
+			return strings.TrimSpace(goorg.String(bodyNodes...))
+		case goorg.PropertyDrawer, goorg.Keyword:
+			continue
+		default:
+			bodyNodes = append(bodyNodes, node)
+		}
+	}
+	return strings.TrimSpace(goorg.String(bodyNodes...))
+}
+
 func hasArchiveTag(tags []string) bool {
 	for _, tag := range tags {
 		if strings.TrimSpace(tag) == "ARCHIVE" {
@@ -285,15 +359,9 @@ func fileCategory(document *goorg.Document) string {
 	if value := bufferSetting(document, "CATEGORY"); value != "" {
 		return value
 	}
-	for _, node := range document.Nodes {
-		switch node := node.(type) {
-		case goorg.Headline:
-			return ""
-		case goorg.PropertyDrawer:
-			if value, ok := node.Get("CATEGORY"); ok && strings.TrimSpace(value) != "" {
-				return strings.TrimSpace(value)
-			}
-		}
+	properties := fileProperties(document)
+	if value, ok := properties.Get("CATEGORY"); ok && strings.TrimSpace(value) != "" {
+		return strings.TrimSpace(value)
 	}
 	return ""
 }
