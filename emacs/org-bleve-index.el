@@ -31,6 +31,20 @@
 ;; rebuild is available through `org-bleve-index-rebuild`, and the diagnostics
 ;; buffer can be opened with `org-bleve-index-open-diagnostics`.
 ;;
+;; v1 intentionally focuses on save-time content edits. That covers normal Org
+;; edits well, but rename and delete workflows are only partially covered. When
+;; you suspect the index may have drifted after file moves or other filesystem
+;; lifecycle events, run `org-bleve-index-rebuild` as the repair path.
+;;
+;; The save-driven contract is still useful in v1: ordinary saves stay
+;; incremental, and missing-file cleanup can still happen through the
+;; `org-search` CLI when the relevant path is updated there. Future work can
+;; improve rename/delete handling through explicit commands, editor hooks for
+;; rename-like operations, or broader filesystem observation.
+;;
+;; The naming boundary is also intentional for now: the Emacs package is named
+;; `org-bleve-index`, while the standalone CLI binary remains `org-search`.
+;;
 ;; This package intentionally keeps a narrow scope: it maintains the external
 ;; Bleve index, but it does not provide interactive search functionality inside
 ;; Emacs.
