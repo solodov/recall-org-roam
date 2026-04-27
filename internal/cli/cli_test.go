@@ -157,10 +157,13 @@ func TestRunDispatchesUpdateFileCommandWithJSONOutput(t *testing.T) {
 	}
 }
 
-func TestRunDispatchesSearchCommandWithJoinedQueryAndHumanOutput(t *testing.T) {
+func TestRunDispatchesSearchCommandWithTerminalLinksAndPlainTextHeadlines(t *testing.T) {
 	t.Helper()
 
-	service := &fakeService{searchResponse: app.SearchResponse{Hits: []app.SearchHit{{ID: "alpha-id", Headline: "Alpha Headline"}, {ID: "beta-id", Headline: "Beta Headline"}}}}
+	service := &fakeService{searchResponse: app.SearchResponse{Hits: []app.SearchHit{
+		{ID: "alpha-id", Headline: "Find a good home for [[https://www.figma.com/board/D2dln8MZxODuCYAugz0BC4][Data model]]"},
+		{ID: "beta-id", Headline: "Beta Headline"},
+	}}}
 	var stdout strings.Builder
 	var stderr strings.Builder
 
@@ -171,7 +174,7 @@ func TestRunDispatchesSearchCommandWithJoinedQueryAndHumanOutput(t *testing.T) {
 	if got, want := service.searchRequest.Query, "headline:foo body:bar"; got != want {
 		t.Fatalf("query = %q, want %q", got, want)
 	}
-	if got, want := stdout.String(), "2 matches\n1. alpha-id: Alpha Headline\n2. beta-id: Beta Headline\n"; got != want {
+	if got, want := stdout.String(), "2 matches\n1. \x1b]8;;org-protocol://roam-node?node=alpha-id\aFind a good home for Data model\x1b]8;;\a\n2. \x1b]8;;org-protocol://roam-node?node=beta-id\aBeta Headline\x1b]8;;\a\n"; got != want {
 		t.Fatalf("stdout = %q, want %q", got, want)
 	}
 	if stderr.Len() != 0 {

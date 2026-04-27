@@ -5,6 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
+	"regexp"
+	"strings"
 
 	"org-search/internal/app"
 	"org-search/internal/projection"
@@ -82,11 +85,32 @@ func writeHumanSearch(writer io.Writer, response app.SearchResponse) error {
 		return err
 	}
 	for index, hit := range response.Hits {
-		if _, err := fmt.Fprintf(writer, "%d. %s: %s\n", index+1, hit.ID, hit.Headline); err != nil {
+		if _, err := fmt.Fprintf(writer, "%d. %s\n", index+1, orgRoamTerminalLink(hit.ID, plainSearchHeadline(hit.Headline))); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+var (
+	orgBracketLinkWithDescriptionRegexp    = regexp.MustCompile(`\[\[[^\]]+\]\[([^\]]+)\]\]`)
+	orgBracketLinkWithoutDescriptionRegexp = regexp.MustCompile(`\[\[([^\]]+)\]\]`)
+)
+
+func orgRoamTerminalLink(id string, label string) string {
+	trimmedLabel := strings.TrimSpace(label)
+	if trimmedLabel == "" {
+		trimmedLabel = "(untitled)"
+	}
+	linkURL := "org-protocol://roam-node?node=" + url.QueryEscape(id)
+	return "\x1b]8;;" + linkURL + "\a" + trimmedLabel + "\x1b]8;;\a"
+}
+
+func plainSearchHeadline(headline string) string {
+	cleaned := strings.TrimSpace(headline)
+	cleaned = orgBracketLinkWithDescriptionRegexp.ReplaceAllString(cleaned, "$1")
+	cleaned = orgBracketLinkWithoutDescriptionRegexp.ReplaceAllString(cleaned, "$1")
+	return cleaned
 }
 
 func writeError(writer io.Writer, err error, jsonOutput bool) {
