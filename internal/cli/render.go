@@ -91,7 +91,7 @@ func writeHumanSearch(writer io.Writer, response app.SearchResponse) error {
 				return err
 			}
 		}
-		if _, err := fmt.Fprintf(writer, "%s\n", group.path); err != nil {
+		if _, err := fmt.Fprintf(writer, "%s\n", fileTerminalLink(group.filePath, group.path)); err != nil {
 			return err
 		}
 		for _, hit := range group.hits {
@@ -115,7 +115,7 @@ func groupSearchHitsByPath(hits []app.SearchHit) []searchHitGroup {
 		if !ok {
 			index = len(groups)
 			groupIndexByPath[path] = index
-			groups = append(groups, searchHitGroup{path: path})
+			groups = append(groups, searchHitGroup{path: path, filePath: strings.TrimSpace(hit.FilePath)})
 		}
 		groups[index].hits = append(groups[index].hits, hit)
 	}
@@ -123,8 +123,9 @@ func groupSearchHitsByPath(hits []app.SearchHit) []searchHitGroup {
 }
 
 type searchHitGroup struct {
-	path string
-	hits []app.SearchHit
+	path     string
+	filePath string
+	hits     []app.SearchHit
 }
 
 var (
@@ -138,7 +139,24 @@ func orgRoamTerminalLink(id string, label string) string {
 		trimmedLabel = "(untitled)"
 	}
 	linkURL := "org-protocol://roam-node?node=" + url.QueryEscape(id)
-	return "\x1b]8;;" + linkURL + "\a\x1b[4m" + trimmedLabel + "\x1b[24m\x1b]8;;\a"
+	return terminalLink(linkURL, trimmedLabel)
+}
+
+func fileTerminalLink(path string, label string) string {
+	trimmedLabel := strings.TrimSpace(label)
+	if trimmedLabel == "" {
+		trimmedLabel = "(unknown path)"
+	}
+	trimmedPath := strings.TrimSpace(path)
+	if trimmedPath == "" {
+		return trimmedLabel
+	}
+	linkURL := (&url.URL{Scheme: "file", Path: trimmedPath}).String()
+	return terminalLink(linkURL, trimmedLabel)
+}
+
+func terminalLink(linkURL string, label string) string {
+	return "\x1b]8;;" + linkURL + "\a\x1b[4m" + label + "\x1b[24m\x1b]8;;\a"
 }
 
 func plainSearchHeadline(headline string) string {

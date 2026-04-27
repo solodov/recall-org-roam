@@ -161,9 +161,9 @@ func TestRunDispatchesSearchCommandWithGroupedUnderlinedTerminalLinks(t *testing
 	t.Helper()
 
 	service := &fakeService{searchResponse: app.SearchResponse{Hits: []app.SearchHit{
-		{ID: "alpha-id", Path: "projects/model.org", Headline: "Find a good home for [[https://www.figma.com/board/D2dln8MZxODuCYAugz0BC4][Data model]]"},
-		{ID: "beta-id", Path: "projects/model.org", Headline: "Beta Headline"},
-		{ID: "gamma-id", Path: "inbox.org", Headline: "Gamma Headline"},
+		{ID: "alpha-id", Path: "projects/model.org", FilePath: "/notes/projects/model.org", Headline: "Find a good home for [[https://www.figma.com/board/D2dln8MZxODuCYAugz0BC4][Data model]]"},
+		{ID: "beta-id", Path: "projects/model.org", FilePath: "/notes/projects/model.org", Headline: "Beta Headline"},
+		{ID: "gamma-id", Path: "inbox.org", FilePath: "/notes/inbox.org", Headline: "Gamma Headline"},
 	}}}
 	var stdout strings.Builder
 	var stderr strings.Builder
@@ -175,7 +175,7 @@ func TestRunDispatchesSearchCommandWithGroupedUnderlinedTerminalLinks(t *testing
 	if got, want := service.searchRequest.Query, "headline:foo body:bar"; got != want {
 		t.Fatalf("query = %q, want %q", got, want)
 	}
-	if got, want := stdout.String(), "3 matches\nprojects/model.org\n  - \x1b]8;;org-protocol://roam-node?node=alpha-id\a\x1b[4mFind a good home for Data model\x1b[24m\x1b]8;;\a\n  - \x1b]8;;org-protocol://roam-node?node=beta-id\a\x1b[4mBeta Headline\x1b[24m\x1b]8;;\a\n\ninbox.org\n  - \x1b]8;;org-protocol://roam-node?node=gamma-id\a\x1b[4mGamma Headline\x1b[24m\x1b]8;;\a\n"; got != want {
+	if got, want := stdout.String(), "3 matches\n\x1b]8;;file:///notes/projects/model.org\a\x1b[4mprojects/model.org\x1b[24m\x1b]8;;\a\n  - \x1b]8;;org-protocol://roam-node?node=alpha-id\a\x1b[4mFind a good home for Data model\x1b[24m\x1b]8;;\a\n  - \x1b]8;;org-protocol://roam-node?node=beta-id\a\x1b[4mBeta Headline\x1b[24m\x1b]8;;\a\n\n\x1b]8;;file:///notes/inbox.org\a\x1b[4minbox.org\x1b[24m\x1b]8;;\a\n  - \x1b]8;;org-protocol://roam-node?node=gamma-id\a\x1b[4mGamma Headline\x1b[24m\x1b]8;;\a\n"; got != want {
 		t.Fatalf("stdout = %q, want %q", got, want)
 	}
 	if stderr.Len() != 0 {

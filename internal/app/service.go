@@ -86,10 +86,11 @@ type SearchResponse struct {
 	Hits []SearchHit `json:"hits"`
 }
 
-// SearchHit stores the CLI search hit. Path stays out of JSON and is used only for human grouping.
+// SearchHit stores the CLI search hit. Path metadata stays out of JSON and is used only for human rendering.
 type SearchHit struct {
 	ID       string `json:"id"`
 	Path     string `json:"-"`
+	FilePath string `json:"-"`
 	Headline string `json:"headline"`
 }
 
@@ -247,7 +248,7 @@ func searchHitsFromIndex(notesRoot string, hits []searchindex.SearchHit) []Searc
 	}
 	converted := make([]SearchHit, 0, len(hits))
 	for _, hit := range hits {
-		converted = append(converted, SearchHit{ID: hit.ID, Path: relativeSearchHitPath(notesRoot, hit.Path), Headline: hit.Headline})
+		converted = append(converted, SearchHit{ID: hit.ID, Path: relativeSearchHitPath(notesRoot, hit.Path), FilePath: hit.Path, Headline: hit.Headline})
 	}
 	return converted
 }
