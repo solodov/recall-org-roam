@@ -84,12 +84,47 @@ func writeHumanSearch(writer io.Writer, response app.SearchResponse) error {
 	if _, err := fmt.Fprintf(writer, "%d matches\n", len(response.Hits)); err != nil {
 		return err
 	}
-	for index, hit := range response.Hits {
-		if _, err := fmt.Fprintf(writer, "%d. %s\n", index+1, orgRoamTerminalLink(hit.ID, plainSearchHeadline(hit.Headline))); err != nil {
+	groups := groupSearchHitsByPath(response.Hits)
+	for index, group := range groups {
+		if index > 0 {
+			if _, err := io.WriteString(writer, "\n"); err != nil {
+				return err
+			}
+		}
+		if _, err := fmt.Fprintf(writer, "%s\n", group.path); err != nil {
 			return err
+		}
+		for _, hit := range group.hits {
+			if _, err := fmt.Fprintf(writer, "  - %s\n", orgRoamTerminalLink(hit.ID, plainSearchHeadline(hit.Headline))); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
+}
+
+func groupSearchHitsByPath(hits []app.SearchHit) []searchHitGroup {
+	groups := make([]searchHitGroup, 0)
+	groupIndexByPath := make(map[string]int, len(hits))
+	for _, hit := range hits {
+		path := strings.TrimSpace(hit.Path)
+		if path == "" {
+			path = "(unknown path)"
+		}
+		index, ok := groupIndexByPath[path]
+		if !ok {
+			index = len(groups)
+			groupIndexByPath[path] = index
+			groups = append(groups, searchHitGroup{path: path})
+		}
+		groups[index].hits = append(groups[index].hits, hit)
+	}
+	return groups
+}
+
+type searchHitGroup struct {
+	path string
+	hits []app.SearchHit
 }
 
 var (
@@ -102,8 +137,8 @@ func orgRoamTerminalLink(id string, label string) string {
 	if trimmedLabel == "" {
 		trimmedLabel = "(untitled)"
 	}
-	linkURL := "org-protocol://roam-ref?template=r&ref=" + url.QueryEscape("id:"+id)
-	return "\x1b]8;;" + linkURL + "\a" + trimmedLabel + "\x1b]8;;\a"
+	linkURL := "org-protocol://roam-node?node=" + url.QueryEscape(id)
+	return "\x1b]8;;" + linkURL + "\a\x1b[4m" + trimmedLabel + "\x1b[24m\x1b]8;;\a"
 }
 
 func plainSearchHeadline(headline string) string {

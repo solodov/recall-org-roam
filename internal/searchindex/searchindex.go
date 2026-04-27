@@ -15,9 +15,10 @@ import (
 
 const pageSize = 1000
 
-// SearchHit stores the minimal v1 search result returned to callers.
+// SearchHit stores the search fields the application layer needs for rendering.
 type SearchHit struct {
 	ID       string
+	Path     string
 	Headline string
 }
 
@@ -286,14 +287,15 @@ func collectSearchHits(index bleve.Index, query query.Query) ([]SearchHit, error
 	hits := make([]SearchHit, 0)
 	for from := 0; ; from += pageSize {
 		request := bleve.NewSearchRequestOptions(query, pageSize, from, false)
-		request.Fields = []string{"headline"}
+		request.Fields = []string{"headline", "path"}
 		result, err := index.Search(request)
 		if err != nil {
 			return nil, err
 		}
 		for _, hit := range result.Hits {
 			headline, _ := hit.Fields["headline"].(string)
-			hits = append(hits, SearchHit{ID: hit.ID, Headline: headline})
+			path, _ := hit.Fields["path"].(string)
+			hits = append(hits, SearchHit{ID: hit.ID, Path: path, Headline: headline})
 		}
 		if len(result.Hits) < pageSize {
 			return hits, nil

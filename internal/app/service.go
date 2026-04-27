@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"org-search/internal/config"
 	"org-search/internal/discovery"
@@ -84,9 +85,10 @@ type SearchResponse struct {
 	Hits []SearchHit `json:"hits"`
 }
 
-// SearchHit stores the minimal v1 search hit returned by the CLI.
+// SearchHit stores the CLI search hit. Path stays out of JSON and is used only for human grouping.
 type SearchHit struct {
 	ID       string `json:"id"`
+	Path     string `json:"-"`
 	Headline string `json:"headline"`
 }
 
@@ -164,7 +166,7 @@ func (service) Search(_ context.Context, request SearchRequest) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return SearchResponse{Hits: searchHitsFromIndex(hits)}, nil
+	return SearchResponse{Hits: searchHitsFromIndex(cfg.NotesRoot, hits)}, nil
 }
 
 func loadConfig(path string) (config.Config, error) {
@@ -238,13 +240,32 @@ func fileInCorpus(notesRoot string, canonicalPath string) (bool, error) {
 	return false, nil
 }
 
-func searchHitsFromIndex(hits []searchindex.SearchHit) []SearchHit {
+func searchHitsFromIndex(notesRoot string, hits []searchindex.SearchHit) []SearchHit {
 	if len(hits) == 0 {
 		return nil
 	}
 	converted := make([]SearchHit, 0, len(hits))
 	for _, hit := range hits {
-		converted = append(converted, SearchHit{ID: hit.ID, Headline: hit.Headline})
+		converted = append(converted, SearchHit{ID: hit.ID, Path: relativeSearchHitPath(notesRoot, hit.Path), Headline: hit.Headline})
 	}
 	return converted
+}
+
+func relativeSearchHitPath(notesRoot string, path string) string {
+	if path == "" {
+		return ""
+	}
+	canonicalRoot, err := discovery.CanonicalizePath(notesRoot)
+	if err != nil {
+		canonicalRoot = notesRoot
+	}
+	canonicalPath, err := discovery.CanonicalizePath(path)
+	if err != nil {
+		canonicalPath = path
+	}
+	relativePath, err := filepath.Rel(canonicalRoot, canonicalPath)
+	if err != nil {
+		return canonicalPath
+	}
+	return filepath.ToSlash(relativePath)
 }

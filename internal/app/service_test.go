@@ -58,6 +58,9 @@ alphabody
 	if len(searchResponse.Hits) != 1 || searchResponse.Hits[0].ID != "alpha-id" {
 		t.Fatalf("search hits = %+v, want alpha-id", searchResponse.Hits)
 	}
+	if got, want := searchResponse.Hits[0].Path, "alpha.org"; got != want {
+		t.Fatalf("search hit path = %q, want %q", got, want)
+	}
 }
 
 func TestNewServiceUpdateFileReplacesAndDeletesOneCanonicalPath(t *testing.T) {
@@ -121,6 +124,9 @@ newbody
 	searchResponse := searchResult.(SearchResponse)
 	if len(searchResponse.Hits) != 1 || searchResponse.Hits[0].ID != "new-id" {
 		t.Fatalf("new hits = %+v, want new-id", searchResponse.Hits)
+	}
+	if got, want := searchResponse.Hits[0].Path, "entry.org"; got != want {
+		t.Fatalf("new hit path = %q, want %q", got, want)
 	}
 
 	searchResult, err = service.Search(context.Background(), SearchRequest{ConfigPath: configPath, Query: "oldbody"})
