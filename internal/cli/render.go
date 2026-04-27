@@ -102,7 +102,7 @@ func orgRoamTerminalLink(id string, label string) string {
 	if trimmedLabel == "" {
 		trimmedLabel = "(untitled)"
 	}
-	linkURL := "org-protocol://roam-node?node=" + url.QueryEscape(id)
+	linkURL := "org-protocol://roam-ref?template=r&ref=" + url.QueryEscape("id:"+id)
 	return "\x1b]8;;" + linkURL + "\a" + trimmedLabel + "\x1b]8;;\a"
 }
 

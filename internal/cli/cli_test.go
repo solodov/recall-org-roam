@@ -174,7 +174,7 @@ func TestRunDispatchesSearchCommandWithTerminalLinksAndPlainTextHeadlines(t *tes
 	if got, want := service.searchRequest.Query, "headline:foo body:bar"; got != want {
 		t.Fatalf("query = %q, want %q", got, want)
 	}
-	if got, want := stdout.String(), "2 matches\n1. \x1b]8;;org-protocol://roam-node?node=alpha-id\aFind a good home for Data model\x1b]8;;\a\n2. \x1b]8;;org-protocol://roam-node?node=beta-id\aBeta Headline\x1b]8;;\a\n"; got != want {
+	if got, want := stdout.String(), "2 matches\n1. \x1b]8;;org-protocol://roam-ref?template=r&ref=id%3Aalpha-id\aFind a good home for Data model\x1b]8;;\a\n2. \x1b]8;;org-protocol://roam-ref?template=r&ref=id%3Abeta-id\aBeta Headline\x1b]8;;\a\n"; got != want {
 		t.Fatalf("stdout = %q, want %q", got, want)
 	}
 	if stderr.Len() != 0 {
