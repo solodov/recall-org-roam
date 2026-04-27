@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode"
 
 	goorg "github.com/niklasfasching/go-org/org"
 
@@ -23,6 +24,7 @@ type EntryDocument struct {
 	CanonicalPath        string
 	Headline             string
 	Todo                 string
+	IsDone               bool
 	ScheduledDate        string
 	ScheduledMinuteOfDay *int
 	DeadlineDate         string
@@ -116,13 +118,15 @@ func projectCanonicalFile(canonicalPath string, visiblePath string) ([]EntryDocu
 	}
 
 	projected := make([]EntryDocument, 0)
+	todoKeywords := collectTodoKeywords(todoKeywordSetting(document))
+	doneKeywords := collectDoneKeywords(todoKeywordSetting(document))
 	for _, section := range document.Outline.Children {
-		collectSectionDocuments(section, visiblePath, canonicalPath, &projected)
+		collectSectionDocuments(section, visiblePath, canonicalPath, todoKeywords, doneKeywords, &projected)
 	}
 	return projected, nil
 }
 
-func collectSectionDocuments(section *goorg.Section, visiblePath string, canonicalPath string, projected *[]EntryDocument) {
+func collectSectionDocuments(section *goorg.Section, visiblePath string, canonicalPath string, todoKeywords []string, doneKeywords map[string]struct{}, projected *[]EntryDocument) {
 	if section == nil || section.Headline == nil {
 		return
 	}
@@ -130,6 +134,7 @@ func collectSectionDocuments(section *goorg.Section, visiblePath string, canonic
 	directBodyNodes := filterDirectBodyNodes(section.Headline.Children)
 	properties, directBodyNodes := extractSectionProperties(section.Headline.Properties, directBodyNodes)
 	planning := extractPlanningMetadata(directBodyNodes)
+	status, headline := projectedHeadlineMetadata(section.Headline, todoKeywords)
 	if id, ok := properties.Get("ID"); ok {
 		trimmedID := strings.TrimSpace(id)
 		if trimmedID != "" {
@@ -137,8 +142,9 @@ func collectSectionDocuments(section *goorg.Section, visiblePath string, canonic
 				ID:                   trimmedID,
 				Path:                 visiblePath,
 				CanonicalPath:        canonicalPath,
-				Headline:             strings.TrimSpace(goorg.String(section.Headline.Title...)),
-				Todo:                 strings.TrimSpace(section.Headline.Status),
+				Headline:             headline,
+				Todo:                 status,
+				IsDone:               isDoneStatus(status, doneKeywords),
 				ScheduledDate:        planning.scheduledDate,
 				ScheduledMinuteOfDay: planning.scheduledMinuteOfDay,
 				DeadlineDate:         planning.deadlineDate,
@@ -149,8 +155,101 @@ func collectSectionDocuments(section *goorg.Section, visiblePath string, canonic
 	}
 
 	for _, child := range section.Children {
-		collectSectionDocuments(child, visiblePath, canonicalPath, projected)
+		collectSectionDocuments(child, visiblePath, canonicalPath, todoKeywords, doneKeywords, projected)
 	}
+}
+
+func projectedHeadlineMetadata(headline *goorg.Headline, todoKeywords []string) (string, string) {
+	rawHeadline := strings.TrimSpace(goorg.String(headline.Title...))
+	status := strings.TrimSpace(headline.Status)
+	if status == "" {
+		status, rawHeadline = extractTodoStatus(rawHeadline, todoKeywords)
+	}
+	return status, stripPriorityPrefix(rawHeadline)
+}
+
+func extractTodoStatus(headline string, todoKeywords []string) (string, string) {
+	for _, keyword := range todoKeywords {
+		if !strings.HasPrefix(headline, keyword) || len(headline) == len(keyword) {
+			continue
+		}
+		if !unicode.IsSpace(rune(headline[len(keyword)])) {
+			continue
+		}
+		return keyword, strings.TrimSpace(headline[len(keyword):])
+	}
+	return "", headline
+}
+
+func stripPriorityPrefix(headline string) string {
+	if len(headline) >= 4 && strings.HasPrefix(headline, "[#") && headline[3] == ']' {
+		return strings.TrimSpace(headline[4:])
+	}
+	return headline
+}
+
+func todoKeywordSetting(document *goorg.Document) string {
+	if value := strings.TrimSpace(document.BufferSettings["TODO"]); value != "" {
+		return value
+	}
+	if value := strings.TrimSpace(document.BufferSettings["todo"]); value != "" {
+		return value
+	}
+	return document.Get("TODO")
+}
+
+func collectTodoKeywords(raw string) []string {
+	todoKeywords := make([]string, 0)
+	for _, token := range strings.Fields(raw) {
+		if token == "|" {
+			continue
+		}
+		trimmedKeyword := trimTodoKeyword(token)
+		if trimmedKeyword == "" {
+			continue
+		}
+		todoKeywords = append(todoKeywords, trimmedKeyword)
+	}
+	return todoKeywords
+}
+
+func collectDoneKeywords(raw string) map[string]struct{} {
+	doneKeywords := make(map[string]struct{})
+	inDoneSection := false
+	for _, token := range strings.Fields(raw) {
+		if token == "|" {
+			inDoneSection = true
+			continue
+		}
+		if !inDoneSection {
+			continue
+		}
+		trimmedKeyword := trimTodoKeyword(token)
+		if trimmedKeyword == "" {
+			continue
+		}
+		doneKeywords[trimmedKeyword] = struct{}{}
+	}
+	return doneKeywords
+}
+
+func isDoneStatus(status string, doneKeywords map[string]struct{}) bool {
+	trimmedStatus := strings.TrimSpace(status)
+	if trimmedStatus == "" {
+		return false
+	}
+	_, ok := doneKeywords[trimmedStatus]
+	return ok
+}
+
+func trimTodoKeyword(keyword string) string {
+	trimmedKeyword := strings.TrimSpace(keyword)
+	leftParen := strings.LastIndex(trimmedKeyword, "(")
+	rightParen := strings.LastIndex(trimmedKeyword, ")")
+	if leftParen != -1 && rightParen == len(trimmedKeyword)-1 && leftParen < rightParen {
+		return trimmedKeyword[:leftParen]
+	}
+	return trimmedKeyword
 }
 
 func extractSectionProperties(headlineProperties *goorg.PropertyDrawer, nodes []goorg.Node) (*goorg.PropertyDrawer, []goorg.Node) {

@@ -46,6 +46,9 @@ Ignored body.
 	if got, want := parent.Todo, "TODO"; got != want {
 		t.Fatalf("parent todo = %q, want %q", got, want)
 	}
+	if parent.IsDone {
+		t.Fatal("parent IsDone = true, want false")
+	}
 	if !strings.Contains(parent.Body, "Parent body.") {
 		t.Fatalf("parent body = %q, want parent body text", parent.Body)
 	}
@@ -63,8 +66,41 @@ Ignored body.
 	if got, want := child.Todo, "DONE"; got != want {
 		t.Fatalf("child todo = %q, want %q", got, want)
 	}
+	if !child.IsDone {
+		t.Fatal("child IsDone = false, want true")
+	}
 	if got, want := child.Body, "Child body."; got != want {
 		t.Fatalf("child body = %q, want %q", got, want)
+	}
+}
+
+func TestProjectFileUsesCustomDoneKeywords(t *testing.T) {
+	t.Helper()
+
+	orgPath := filepath.Join(t.TempDir(), "custom-todo.org")
+	writeOrgFile(t, orgPath, `#+todo: TODO WAIT | DONE CANCELED
+* CANCELED Finished enough
+:PROPERTIES:
+:ID: canceled-id
+:END:
+Body.
+`)
+
+	documents, err := ProjectFile(orgPath)
+	if err != nil {
+		t.Fatalf("project file: %v", err)
+	}
+	if len(documents) != 1 {
+		t.Fatalf("documents = %+v, want 1 projected entry", documents)
+	}
+	if got, want := documents[0].Todo, "CANCELED"; got != want {
+		t.Fatalf("todo = %q, want %q", got, want)
+	}
+	if got, want := documents[0].Headline, "Finished enough"; got != want {
+		t.Fatalf("headline = %q, want %q", got, want)
+	}
+	if !documents[0].IsDone {
+		t.Fatal("IsDone = false, want true for custom done keyword")
 	}
 }
 
@@ -72,7 +108,7 @@ func TestProjectFileIndexesScheduledAndDeadlinePlanningMetadata(t *testing.T) {
 	t.Helper()
 
 	orgPath := filepath.Join(t.TempDir(), "planning.org")
-	writeOrgFile(t, orgPath, `* TODO Planned
+	writeOrgFile(t, orgPath, `* DONE Planned
 CLOSED: [2026-04-27 Mon 18:00] SCHEDULED: <2026-04-28 Tue 09:15> DEADLINE: <2026-04-29 Wed>
 :PROPERTIES:
 :ID: planned-id
@@ -86,6 +122,9 @@ Body.
 	}
 	if len(documents) != 1 {
 		t.Fatalf("documents = %+v, want 1 projected entry", documents)
+	}
+	if !documents[0].IsDone {
+		t.Fatal("IsDone = false, want true")
 	}
 	if got, want := documents[0].ScheduledDate, "2026-04-28"; got != want {
 		t.Fatalf("scheduledDate = %q, want %q", got, want)

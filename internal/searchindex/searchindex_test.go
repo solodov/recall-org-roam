@@ -219,14 +219,17 @@ func TestSearchSupportsPlanningAwareDialectFilters(t *testing.T) {
 
 	indexDir := filepath.Join(t.TempDir(), "index")
 	overdueScheduledYesterday := projection.EntryDocument{ID: "overdue-scheduled-yesterday", Path: writeIndexFile(t, filepath.Join(t.TempDir(), "overdue-scheduled-yesterday.org")), Headline: "Overdue Scheduled Yesterday", ScheduledDate: "2026-04-28", Body: "alpha"}
+	overdueLastWeek := projection.EntryDocument{ID: "overdue-last-week", Path: writeIndexFile(t, filepath.Join(t.TempDir(), "overdue-last-week.org")), Headline: "Overdue Last Week", DeadlineDate: "2026-04-20", Body: "bravo"}
 	overdueDeadlineEarlierTodayMinute := 9 * 60
-	overdueDeadlineEarlierToday := projection.EntryDocument{ID: "overdue-deadline-earlier-today", Path: writeIndexFile(t, filepath.Join(t.TempDir(), "overdue-deadline-earlier-today.org")), Headline: "Overdue Deadline Earlier Today", DeadlineDate: "2026-04-29", DeadlineMinuteOfDay: &overdueDeadlineEarlierTodayMinute, Body: "bravo"}
+	overdueDeadlineEarlierToday := projection.EntryDocument{ID: "overdue-deadline-earlier-today", Path: writeIndexFile(t, filepath.Join(t.TempDir(), "overdue-deadline-earlier-today.org")), Headline: "Overdue Deadline Earlier Today", DeadlineDate: "2026-04-29", DeadlineMinuteOfDay: &overdueDeadlineEarlierTodayMinute, Body: "charlie"}
 	dueTodayLaterMinute := 15 * 60
-	dueTodayLater := projection.EntryDocument{ID: "due-today-later", Path: writeIndexFile(t, filepath.Join(t.TempDir(), "due-today-later.org")), Headline: "Due Today Later", ScheduledDate: "2026-04-29", ScheduledMinuteOfDay: &dueTodayLaterMinute, Body: "charlie"}
-	dueThisWeek := projection.EntryDocument{ID: "due-this-week", Path: writeIndexFile(t, filepath.Join(t.TempDir(), "due-this-week.org")), Headline: "Due This Week", DeadlineDate: "2026-05-03", Body: "delta"}
-	nextWeek := projection.EntryDocument{ID: "next-week", Path: writeIndexFile(t, filepath.Join(t.TempDir(), "next-week.org")), Headline: "Next Week", DeadlineDate: "2026-05-04", Body: "echo"}
-	noPlanning := projection.EntryDocument{ID: "no-planning", Path: writeIndexFile(t, filepath.Join(t.TempDir(), "no-planning.org")), Headline: "No Planning", Body: "foxtrot"}
-	if err := Rebuild(indexDir, []projection.EntryDocument{overdueScheduledYesterday, overdueDeadlineEarlierToday, dueTodayLater, dueThisWeek, nextWeek, noPlanning}); err != nil {
+	dueTodayLater := projection.EntryDocument{ID: "due-today-later", Path: writeIndexFile(t, filepath.Join(t.TempDir(), "due-today-later.org")), Headline: "Due Today Later", ScheduledDate: "2026-04-29", ScheduledMinuteOfDay: &dueTodayLaterMinute, Body: "delta"}
+	dueThisWeek := projection.EntryDocument{ID: "due-this-week", Path: writeIndexFile(t, filepath.Join(t.TempDir(), "due-this-week.org")), Headline: "Due This Week", DeadlineDate: "2026-05-03", Body: "echo"}
+	nextWeek := projection.EntryDocument{ID: "next-week", Path: writeIndexFile(t, filepath.Join(t.TempDir(), "next-week.org")), Headline: "Next Week", DeadlineDate: "2026-05-04", Body: "foxtrot"}
+	doneOverdue := projection.EntryDocument{ID: "done-overdue", Path: writeIndexFile(t, filepath.Join(t.TempDir(), "done-overdue.org")), Headline: "Done Overdue", Todo: "DONE", IsDone: true, DeadlineDate: "2026-04-20", Body: "golf"}
+	legacyDoneOverdue := projection.EntryDocument{ID: "legacy-done-overdue", Path: writeIndexFile(t, filepath.Join(t.TempDir(), "legacy-done-overdue.org")), Headline: "Legacy Done Overdue", Todo: "DONE", DeadlineDate: "2026-04-18", Body: "hotel"}
+	noPlanning := projection.EntryDocument{ID: "no-planning", Path: writeIndexFile(t, filepath.Join(t.TempDir(), "no-planning.org")), Headline: "No Planning", Body: "india"}
+	if err := Rebuild(indexDir, []projection.EntryDocument{overdueScheduledYesterday, overdueLastWeek, overdueDeadlineEarlierToday, dueTodayLater, dueThisWeek, nextWeek, doneOverdue, legacyDoneOverdue, noPlanning}); err != nil {
 		t.Fatalf("rebuild index: %v", err)
 	}
 
@@ -236,21 +239,21 @@ func TestSearchSupportsPlanningAwareDialectFilters(t *testing.T) {
 	if err != nil {
 		t.Fatalf("search overdue: %v", err)
 	}
-	assertHitIDs(t, hits, []string{"overdue-scheduled-yesterday", "overdue-deadline-earlier-today"})
+	assertHitIDs(t, hits, []string{"overdue-scheduled-yesterday", "overdue-last-week", "overdue-deadline-earlier-today"})
 
 	hits, err = searchAt(indexDir, "due:today", now)
 	if err != nil {
 		t.Fatalf("search due today: %v", err)
 	}
-	assertHitIDs(t, hits, []string{"overdue-deadline-earlier-today", "due-today-later"})
+	assertHitIDs(t, hits, []string{"overdue-scheduled-yesterday", "overdue-last-week", "overdue-deadline-earlier-today", "due-today-later"})
 
 	hits, err = searchAt(indexDir, "due:this-week", now)
 	if err != nil {
 		t.Fatalf("search due this week: %v", err)
 	}
-	assertHitIDs(t, hits, []string{"overdue-scheduled-yesterday", "overdue-deadline-earlier-today", "due-today-later", "due-this-week"})
+	assertHitIDs(t, hits, []string{"overdue-scheduled-yesterday", "overdue-last-week", "overdue-deadline-earlier-today", "due-today-later", "due-this-week"})
 
-	hits, err = searchAt(indexDir, "charlie due:today", now)
+	hits, err = searchAt(indexDir, "delta due:today", now)
 	if err != nil {
 		t.Fatalf("search mixed raw bleve and due today: %v", err)
 	}

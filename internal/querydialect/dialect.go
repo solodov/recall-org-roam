@@ -153,30 +153,44 @@ func (dueOperator) compile(value string, now time.Time) (blevequery.Query, error
 }
 
 func overdueQuery(now time.Time) blevequery.Query {
-	today := localDate(now)
-	currentMinute := float64(now.Hour()*60 + now.Minute())
-
-	return disjunction([]blevequery.Query{
-		dateBeforeQuery("scheduled_date", today),
-		dateBeforeQuery("deadline_date", today),
-		timedEarlierTodayQuery("scheduled_date", "scheduled_minute_of_day", today, currentMinute),
-		timedEarlierTodayQuery("deadline_date", "deadline_minute_of_day", today, currentMinute),
+	return conjunction([]blevequery.Query{
+		notDoneQuery(),
+		overdueCoreQuery(now),
 	})
 }
 
 func dueTodayQuery(now time.Time) blevequery.Query {
 	today := localDate(now)
-	return disjunction([]blevequery.Query{
-		dateEqualsQuery("scheduled_date", today),
-		dateEqualsQuery("deadline_date", today),
+	return conjunction([]blevequery.Query{
+		notDoneQuery(),
+		disjunction([]blevequery.Query{
+			overdueCoreQuery(now),
+			dateEqualsQuery("scheduled_date", today),
+			dateEqualsQuery("deadline_date", today),
+		}),
 	})
 }
 
 func dueThisWeekQuery(now time.Time) blevequery.Query {
 	weekStart, weekEnd := currentWeekBounds(now)
+	return conjunction([]blevequery.Query{
+		notDoneQuery(),
+		disjunction([]blevequery.Query{
+			overdueCoreQuery(now),
+			dateRangeInclusiveQuery("scheduled_date", weekStart, weekEnd),
+			dateRangeInclusiveQuery("deadline_date", weekStart, weekEnd),
+		}),
+	})
+}
+
+func overdueCoreQuery(now time.Time) blevequery.Query {
+	today := localDate(now)
+	currentMinute := float64(now.Hour()*60 + now.Minute())
 	return disjunction([]blevequery.Query{
-		dateRangeInclusiveQuery("scheduled_date", weekStart, weekEnd),
-		dateRangeInclusiveQuery("deadline_date", weekStart, weekEnd),
+		dateBeforeQuery("scheduled_date", today),
+		dateBeforeQuery("deadline_date", today),
+		timedEarlierTodayQuery("scheduled_date", "scheduled_minute_of_day", today, currentMinute),
+		timedEarlierTodayQuery("deadline_date", "deadline_minute_of_day", today, currentMinute),
 	})
 }
 
@@ -210,6 +224,16 @@ func numericBeforeQuery(field string, max float64) blevequery.Query {
 	numericQuery := bleve.NewNumericRangeQuery(nil, &max)
 	numericQuery.SetField(field)
 	return numericQuery
+}
+
+func notDoneQuery() blevequery.Query {
+	doneBoolQuery := bleve.NewBoolFieldQuery(true)
+	doneBoolQuery.SetField("is_done")
+	doneTodoFallbackQuery := bleve.NewTermQuery("DONE")
+	doneTodoFallbackQuery.SetField("todo")
+	booleanQuery := bleve.NewBooleanQuery()
+	booleanQuery.AddMustNot(disjunction([]blevequery.Query{doneBoolQuery, doneTodoFallbackQuery}))
+	return booleanQuery
 }
 
 func conjunction(queries []blevequery.Query) blevequery.Query {

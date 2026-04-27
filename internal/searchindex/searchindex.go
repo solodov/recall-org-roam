@@ -154,6 +154,7 @@ func indexDocuments(index bleve.Index, documents []projection.EntryDocument) err
 			"canonical_path": canonicalPath,
 			"headline":       document.Headline,
 			"todo":           document.Todo,
+			"is_done":        document.IsDone,
 			"body":           document.Body,
 		}
 		if document.ScheduledDate != "" {
@@ -395,6 +396,10 @@ func newIndexMapping() *mapping.IndexMappingImpl {
 	todoFieldMapping.Store = true
 	todoFieldMapping.IncludeInAll = false
 
+	isDoneFieldMapping := bleve.NewBooleanFieldMapping()
+	isDoneFieldMapping.Store = true
+	isDoneFieldMapping.IncludeInAll = false
+
 	scheduledDateFieldMapping := bleve.NewKeywordFieldMapping()
 	scheduledDateFieldMapping.Store = true
 	scheduledDateFieldMapping.IncludeInAll = false
@@ -419,6 +424,7 @@ func newIndexMapping() *mapping.IndexMappingImpl {
 	indexMapping.DefaultMapping.AddFieldMappingsAt("canonical_path", canonicalPathFieldMapping)
 	indexMapping.DefaultMapping.AddFieldMappingsAt("headline", headlineFieldMapping)
 	indexMapping.DefaultMapping.AddFieldMappingsAt("todo", todoFieldMapping)
+	indexMapping.DefaultMapping.AddFieldMappingsAt("is_done", isDoneFieldMapping)
 	indexMapping.DefaultMapping.AddFieldMappingsAt("scheduled_date", scheduledDateFieldMapping)
 	indexMapping.DefaultMapping.AddFieldMappingsAt("scheduled_minute_of_day", scheduledMinuteOfDayFieldMapping)
 	indexMapping.DefaultMapping.AddFieldMappingsAt("deadline_date", deadlineDateFieldMapping)
