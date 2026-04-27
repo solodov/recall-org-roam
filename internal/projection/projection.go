@@ -31,6 +31,7 @@ type EntryDocument struct {
 	IsDone               bool
 	IsArchived           bool
 	Tags                 []string
+	Style                string
 	Category             string
 	ScheduledDate        string
 	ScheduledMinuteOfDay *int
@@ -167,6 +168,7 @@ func projectFileRootEntry(document *goorg.Document, visiblePath string, canonica
 		Headline:      headline,
 		IsArchived:    hasArchiveTag(fileTags),
 		Tags:          hierarchy.Expand(fileTags),
+		Style:         fileStyle(document),
 		Category:      category,
 		Body:          fileRootBody(document),
 	}
@@ -207,6 +209,7 @@ func collectSectionDocuments(section *goorg.Section, visiblePath string, canonic
 				IsDone:               isDoneStatus(status, doneKeywords),
 				IsArchived:           archived,
 				Tags:                 expandedTags,
+				Style:                propertyValue(properties, "STYLE"),
 				Category:             category,
 				ScheduledDate:        planning.scheduledDate,
 				ScheduledMinuteOfDay: planning.scheduledMinuteOfDay,
@@ -355,12 +358,19 @@ func parseFileTags(raw string) []string {
 	return tags
 }
 
+func fileStyle(document *goorg.Document) string {
+	return propertyValue(fileProperties(document), "STYLE")
+}
+
 func fileCategory(document *goorg.Document) string {
 	if value := bufferSetting(document, "CATEGORY"); value != "" {
 		return value
 	}
-	properties := fileProperties(document)
-	if value, ok := properties.Get("CATEGORY"); ok && strings.TrimSpace(value) != "" {
+	return propertyValue(fileProperties(document), "CATEGORY")
+}
+
+func propertyValue(properties *goorg.PropertyDrawer, key string) string {
+	if value, ok := properties.Get(key); ok && strings.TrimSpace(value) != "" {
 		return strings.TrimSpace(value)
 	}
 	return ""

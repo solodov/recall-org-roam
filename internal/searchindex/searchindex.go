@@ -174,6 +174,11 @@ func indexDocuments(index bleve.Index, documents []projection.EntryDocument) err
 		if len(document.Tags) > 0 {
 			indexDocument["tag"] = document.Tags
 		}
+		if document.Style != "" {
+			indexDocument["style"] = document.Style
+			indexDocument["property_name"] = []string{"STYLE"}
+			indexDocument["property_pair"] = []string{"STYLE=" + document.Style}
+		}
 		if document.Category != "" {
 			indexDocument["category"] = document.Category
 		}
@@ -471,6 +476,18 @@ func newIndexMapping() *mapping.IndexMappingImpl {
 	tagFieldMapping.Store = true
 	tagFieldMapping.IncludeInAll = false
 
+	styleFieldMapping := bleve.NewKeywordFieldMapping()
+	styleFieldMapping.Store = true
+	styleFieldMapping.IncludeInAll = false
+
+	propertyNameFieldMapping := bleve.NewKeywordFieldMapping()
+	propertyNameFieldMapping.Store = false
+	propertyNameFieldMapping.IncludeInAll = false
+
+	propertyPairFieldMapping := bleve.NewKeywordFieldMapping()
+	propertyPairFieldMapping.Store = false
+	propertyPairFieldMapping.IncludeInAll = false
+
 	categoryFieldMapping := bleve.NewKeywordFieldMapping()
 	categoryFieldMapping.Store = true
 	categoryFieldMapping.IncludeInAll = false
@@ -505,6 +522,9 @@ func newIndexMapping() *mapping.IndexMappingImpl {
 	indexMapping.DefaultMapping.AddFieldMappingsAt("is_done", isDoneFieldMapping)
 	indexMapping.DefaultMapping.AddFieldMappingsAt("is_archived", isArchivedFieldMapping)
 	indexMapping.DefaultMapping.AddFieldMappingsAt("tag", tagFieldMapping)
+	indexMapping.DefaultMapping.AddFieldMappingsAt("style", styleFieldMapping)
+	indexMapping.DefaultMapping.AddFieldMappingsAt("property_name", propertyNameFieldMapping)
+	indexMapping.DefaultMapping.AddFieldMappingsAt("property_pair", propertyPairFieldMapping)
 	indexMapping.DefaultMapping.AddFieldMappingsAt("category", categoryFieldMapping)
 	indexMapping.DefaultMapping.AddFieldMappingsAt("scheduled_date", scheduledDateFieldMapping)
 	indexMapping.DefaultMapping.AddFieldMappingsAt("scheduled_minute_of_day", scheduledMinuteOfDayFieldMapping)

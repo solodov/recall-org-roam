@@ -268,6 +268,39 @@ Body.
 	}
 }
 
+func TestProjectFileIndexesStyleWithoutGenericInheritance(t *testing.T) {
+	t.Helper()
+
+	orgPath := filepath.Join(t.TempDir(), "style.org")
+	writeOrgFile(t, orgPath, `* Parent
+:PROPERTIES:
+:STYLE: habit
+:ID: parent-id
+:END:
+Body.
+
+** Child
+:PROPERTIES:
+:ID: child-id
+:END:
+Body.
+`)
+
+	documents, err := ProjectFile(orgPath, taghierarchy.Hierarchy{})
+	if err != nil {
+		t.Fatalf("project file: %v", err)
+	}
+	if len(documents) != 2 {
+		t.Fatalf("documents = %+v, want 2 projected entries", documents)
+	}
+	if got, want := documents[0].Style, "habit"; got != want {
+		t.Fatalf("parent style = %q, want %q", got, want)
+	}
+	if documents[1].Style != "" {
+		t.Fatalf("child style = %q, want empty without generic property inheritance", documents[1].Style)
+	}
+}
+
 func TestProjectFileIndexesInheritedAndExpandedTags(t *testing.T) {
 	t.Helper()
 

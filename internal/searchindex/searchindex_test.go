@@ -173,6 +173,7 @@ func TestRebuildStoresScheduledAndDeadlinePlanningFields(t *testing.T) {
 		Outline:              "Root / Parent / Planned",
 		Headline:             "Planned",
 		Tags:                 []string{"alpha-tag", "beta-tag"},
+		Style:                "habit",
 		Category:             "work",
 		ScheduledDate:        "2026-04-28",
 		ScheduledMinuteOfDay: &scheduledMinuteOfDay,
@@ -197,7 +198,7 @@ func TestRebuildStoresScheduledAndDeadlinePlanningFields(t *testing.T) {
 		_ = index.Close()
 	}()
 
-	plannedFields := storedFieldsForDocumentID(t, index, "planned-id", []string{"parent_id", "ancestor_id", "outline", "tag", "category", "is_archived", "scheduled_date", "scheduled_minute_of_day", "deadline_date", "deadline_minute_of_day"})
+	plannedFields := storedFieldsForDocumentID(t, index, "planned-id", []string{"parent_id", "ancestor_id", "outline", "tag", "style", "category", "is_archived", "scheduled_date", "scheduled_minute_of_day", "deadline_date", "deadline_minute_of_day"})
 	if got, want := plannedFields["parent_id"], "parent-id"; got != want {
 		t.Fatalf("parent_id = %#v, want %#v", got, want)
 	}
@@ -209,6 +210,9 @@ func TestRebuildStoresScheduledAndDeadlinePlanningFields(t *testing.T) {
 	}
 	if got, want := mustStoredStrings(t, plannedFields, "tag"), []string{"alpha-tag", "beta-tag"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("tag = %#v, want %#v", got, want)
+	}
+	if got, want := plannedFields["style"], "habit"; got != want {
+		t.Fatalf("style = %#v, want %#v", got, want)
 	}
 	if got, want := plannedFields["category"], "work"; got != want {
 		t.Fatalf("category = %#v, want %#v", got, want)
@@ -330,7 +334,7 @@ func TestSearchPassesThroughBleveQueryStringSemantics(t *testing.T) {
 	firstPath := writeIndexFile(t, filepath.Join(t.TempDir(), "first.org"))
 	secondPath := writeIndexFile(t, filepath.Join(t.TempDir(), "second.org"))
 	if err := Rebuild(indexDir, []projection.EntryDocument{
-		{ID: "alpha-id", Path: firstPath, ParentID: "parent-id", AncestorIDs: []string{"root-id", "parent-id"}, Outline: "Root / Unique Container / Alpha Headline", Headline: "Alpha Headline", Todo: "TODO", Tags: []string{"team", "focused"}, Category: "work", Body: "alpha bravo"},
+		{ID: "alpha-id", Path: firstPath, ParentID: "parent-id", AncestorIDs: []string{"root-id", "parent-id"}, Outline: "Root / Unique Container / Alpha Headline", Headline: "Alpha Headline", Todo: "TODO", Tags: []string{"team", "focused"}, Style: "habit", Category: "work", Body: "alpha bravo"},
 		{ID: "beta-id", Path: secondPath, ParentID: "other-parent-id", AncestorIDs: []string{"root-id", "other-parent-id"}, Outline: "Root / Other Container / Beta Headline", Headline: "Beta Headline", Todo: "DONE", Tags: []string{"team"}, Category: "home", Body: "alpha"},
 	}); err != nil {
 		t.Fatalf("rebuild index: %v", err)
@@ -374,6 +378,38 @@ func TestSearchPassesThroughBleveQueryStringSemantics(t *testing.T) {
 	}
 	if len(hits) != 1 || hits[0].ID != "alpha-id" {
 		t.Fatalf("tag hits = %+v, want alpha-id only", hits)
+	}
+
+	hits, err = Search(indexDir, "hasprop:style")
+	if err != nil {
+		t.Fatalf("search hasprop query: %v", err)
+	}
+	if len(hits) != 1 || hits[0].ID != "alpha-id" {
+		t.Fatalf("hasprop hits = %+v, want alpha-id only", hits)
+	}
+
+	hits, err = Search(indexDir, "prop:style=habit")
+	if err != nil {
+		t.Fatalf("search prop query: %v", err)
+	}
+	if len(hits) != 1 || hits[0].ID != "alpha-id" {
+		t.Fatalf("prop hits = %+v, want alpha-id only", hits)
+	}
+
+	hits, err = Search(indexDir, "is:habit")
+	if err != nil {
+		t.Fatalf("search habit shortcut: %v", err)
+	}
+	if len(hits) != 1 || hits[0].ID != "alpha-id" {
+		t.Fatalf("habit hits = %+v, want alpha-id only", hits)
+	}
+
+	hits, err = Search(indexDir, "habit")
+	if err != nil {
+		t.Fatalf("search default free text without style in _all: %v", err)
+	}
+	if len(hits) != 0 {
+		t.Fatalf("default style hits = %+v, want none", hits)
 	}
 
 	hits, err = Search(indexDir, "+parent_id:parent-id +alpha")

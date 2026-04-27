@@ -158,8 +158,10 @@ type dialectOperator interface {
 }
 
 var dialectOperators = map[string]dialectOperator{
-	"is":  isOperator{},
-	"due": dueOperator{},
+	"hasprop": hasPropOperator{},
+	"is":      isOperator{},
+	"due":     dueOperator{},
+	"prop":    propOperator{},
 }
 
 type isOperator struct{}
@@ -168,11 +170,41 @@ func (isOperator) compile(value string, now time.Time) (blevequery.Query, error)
 	switch value {
 	case "archived":
 		return archivedQuery(), nil
+	case "habit":
+		return propertyPairQuery("STYLE", "habit"), nil
 	case "overdue":
 		return overdueQuery(now), nil
 	default:
 		return nil, fmt.Errorf("unsupported is: filter %q", value)
 	}
+}
+
+type hasPropOperator struct{}
+
+func (hasPropOperator) compile(value string, now time.Time) (blevequery.Query, error) {
+	propertyName, err := normalizedPropertyName(value)
+	if err != nil {
+		return nil, err
+	}
+	return propertyNameQuery(propertyName), nil
+}
+
+type propOperator struct{}
+
+func (propOperator) compile(value string, now time.Time) (blevequery.Query, error) {
+	propertyNameText, propertyValueText, hasSeparator := strings.Cut(value, "=")
+	if !hasSeparator {
+		return nil, fmt.Errorf("prop: filter %q requires key=value", value)
+	}
+	propertyName, err := normalizedPropertyName(propertyNameText)
+	if err != nil {
+		return nil, err
+	}
+	propertyValue := trimmedQueryValue(propertyValueText)
+	if propertyValue == "" {
+		return nil, fmt.Errorf("prop: filter %q requires a non-empty value", value)
+	}
+	return propertyPairQuery(propertyName, propertyValue), nil
 }
 
 type dueOperator struct{}
@@ -260,6 +292,35 @@ func numericBeforeQuery(field string, max float64) blevequery.Query {
 	numericQuery := bleve.NewNumericRangeQuery(nil, &max)
 	numericQuery.SetField(field)
 	return numericQuery
+}
+
+func propertyNameQuery(name string) blevequery.Query {
+	propertyNameQuery := bleve.NewTermQuery(name)
+	propertyNameQuery.SetField("property_name")
+	return propertyNameQuery
+}
+
+func propertyPairQuery(name string, value string) blevequery.Query {
+	propertyPairQuery := bleve.NewTermQuery(name + "=" + value)
+	propertyPairQuery.SetField("property_pair")
+	return propertyPairQuery
+}
+
+func normalizedPropertyName(raw string) (string, error) {
+	trimmedName := strings.TrimSpace(raw)
+	trimmedName = strings.TrimSuffix(trimmedName, "+")
+	if trimmedName == "" {
+		return "", fmt.Errorf("property name is required")
+	}
+	return strings.ToUpper(trimmedName), nil
+}
+
+func trimmedQueryValue(raw string) string {
+	trimmedValue := strings.TrimSpace(raw)
+	if len(trimmedValue) >= 2 && trimmedValue[0] == '"' && trimmedValue[len(trimmedValue)-1] == '"' {
+		return trimmedValue[1 : len(trimmedValue)-1]
+	}
+	return trimmedValue
 }
 
 func archivedQuery() blevequery.Query {
