@@ -4,8 +4,11 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
+
+	"org-search/internal/taghierarchy"
 )
 
 func TestProjectFileProjectsOnlyEntriesWithIDAndExcludesDescendantSubtrees(t *testing.T) {
@@ -28,7 +31,7 @@ Child body.
 Ignored body.
 `)
 
-	documents, err := ProjectFile(orgPath)
+	documents, err := ProjectFile(orgPath, taghierarchy.Hierarchy{})
 	if err != nil {
 		t.Fatalf("project file: %v", err)
 	}
@@ -86,7 +89,7 @@ func TestProjectFileUsesCustomDoneKeywords(t *testing.T) {
 Body.
 `)
 
-	documents, err := ProjectFile(orgPath)
+	documents, err := ProjectFile(orgPath, taghierarchy.Hierarchy{})
 	if err != nil {
 		t.Fatalf("project file: %v", err)
 	}
@@ -128,7 +131,7 @@ Body.
 Body.
 `)
 
-	documents, err := ProjectFile(orgPath)
+	documents, err := ProjectFile(orgPath, taghierarchy.Hierarchy{})
 	if err != nil {
 		t.Fatalf("project file: %v", err)
 	}
@@ -157,7 +160,7 @@ func TestProjectFileReadsFileCategoryFromTopPropertyDrawer(t *testing.T) {
 Body.
 `)
 
-	documents, err := ProjectFile(orgPath)
+	documents, err := ProjectFile(orgPath, taghierarchy.Hierarchy{})
 	if err != nil {
 		t.Fatalf("project file: %v", err)
 	}
@@ -195,7 +198,7 @@ Body.
 Body.
 `)
 
-	documents, err := ProjectFile(orgPath)
+	documents, err := ProjectFile(orgPath, taghierarchy.Hierarchy{})
 	if err != nil {
 		t.Fatalf("project file: %v", err)
 	}
@@ -213,6 +216,37 @@ Body.
 	}
 }
 
+func TestProjectFileIndexesInheritedAndExpandedTags(t *testing.T) {
+	t.Helper()
+
+	hierarchy := mustTagHierarchy(t, `#+TAGS: [ topic : file_tag ]
+#+TAGS: [ broad : parent_tag leaf_tag ]
+#+TAGS: [ root : broad ]
+`)
+	orgPath := filepath.Join(t.TempDir(), "tagged.org")
+	writeOrgFile(t, orgPath, `#+FILETAGS: :file_tag:
+* Parent :parent_tag:
+Body.
+
+** Child :leaf_tag:
+:PROPERTIES:
+:ID: child-id
+:END:
+Body.
+`)
+
+	documents, err := ProjectFile(orgPath, hierarchy)
+	if err != nil {
+		t.Fatalf("project file: %v", err)
+	}
+	if len(documents) != 1 {
+		t.Fatalf("documents = %+v, want 1 projected entry", documents)
+	}
+	if got, want := documents[0].Tags, []string{"broad", "file_tag", "leaf_tag", "parent_tag", "root", "topic"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("tags = %#v, want %#v", got, want)
+	}
+}
+
 func TestProjectFileIndexesScheduledAndDeadlinePlanningMetadata(t *testing.T) {
 	t.Helper()
 
@@ -225,7 +259,7 @@ CLOSED: [2026-04-27 Mon 18:00] SCHEDULED: <2026-04-28 Tue 09:15> DEADLINE: <2026
 Body.
 `)
 
-	documents, err := ProjectFile(orgPath)
+	documents, err := ProjectFile(orgPath, taghierarchy.Hierarchy{})
 	if err != nil {
 		t.Fatalf("project file: %v", err)
 	}
@@ -273,7 +307,7 @@ Body.
 		t.Fatalf("create symlink: %v", err)
 	}
 
-	documents, err := ProjectFile(symlinkPath)
+	documents, err := ProjectFile(symlinkPath, taghierarchy.Hierarchy{})
 	if err != nil {
 		t.Fatalf("project file: %v", err)
 	}
@@ -317,7 +351,7 @@ Third body.
 Fourth body.
 `)
 
-	_, err := ProjectFile(orgPath)
+	_, err := ProjectFile(orgPath, taghierarchy.Hierarchy{})
 	if err == nil {
 		t.Fatal("expected duplicate ID error")
 	}
@@ -360,7 +394,7 @@ Second body.
 Third body.
 `)
 
-	_, err := ProjectPaths([]string{firstPath, secondPath, thirdPath})
+	_, err := ProjectPaths([]string{firstPath, secondPath, thirdPath}, taghierarchy.Hierarchy{})
 	if err == nil {
 		t.Fatal("expected duplicate ID error")
 	}
@@ -404,6 +438,16 @@ func assertDuplicateIDs(t *testing.T, got DuplicateIDsError, want []DuplicateID)
 			}
 		}
 	}
+}
+
+func mustTagHierarchy(t *testing.T, raw string) taghierarchy.Hierarchy {
+	t.Helper()
+
+	hierarchy, err := taghierarchy.Parse([]byte(raw), "tags.org")
+	if err != nil {
+		t.Fatalf("parse tag hierarchy: %v", err)
+	}
+	return hierarchy
 }
 
 func mustMinuteOfDay(t *testing.T, minuteOfDay *int) int {

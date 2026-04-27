@@ -11,6 +11,7 @@ import (
 	"org-search/internal/discovery"
 	"org-search/internal/projection"
 	"org-search/internal/searchindex"
+	"org-search/internal/taghierarchy"
 )
 
 // Service exposes the application operations behind the Cobra command surface.
@@ -106,30 +107,18 @@ func (service) Rebuild(_ context.Context, request RebuildRequest) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	result, err := discovery.Discover(cfg.NotesRoot, discoveryOptions(cfg))
-	if err != nil {
-		return nil, err
-	}
-	documents, err := projection.ProjectPaths(result.Paths)
-	if err != nil {
-		return nil, err
-	}
-	if err := searchindex.Rebuild(cfg.IndexDirectory, documents); err != nil {
-		return nil, err
-	}
-
-	return RebuildResponse{
-		IndexedFileCount:  len(result.Paths),
-		IndexedEntryCount: len(documents),
-		Warnings:          warningsFromDiscovery(result.Warnings),
-	}, nil
+	return rebuildWithConfig(cfg)
 }
 
 func (service) UpdateFile(_ context.Context, request UpdateFileRequest) (any, error) {
 	cfg, err := loadConfig(request.ConfigPath)
 	if err != nil {
 		return nil, err
+	}
+	if hierarchyPathChanged, err := isTagHierarchyPath(cfg.NotesRoot, request.Path); err != nil {
+		return nil, err
+	} else if hierarchyPathChanged {
+		return rebuildWithConfig(cfg)
 	}
 
 	prepared, err := prepareFileUpdate(cfg, request.Path)
@@ -183,6 +172,30 @@ func discoveryOptions(cfg config.Config) discovery.Options {
 	return discovery.Options{ExcludedDirectoryNames: cfg.ExcludedDirectoryNames}
 }
 
+func rebuildWithConfig(cfg config.Config) (RebuildResponse, error) {
+	result, err := discovery.Discover(cfg.NotesRoot, discoveryOptions(cfg))
+	if err != nil {
+		return RebuildResponse{}, err
+	}
+	hierarchy, err := taghierarchy.Load(cfg.NotesRoot)
+	if err != nil {
+		return RebuildResponse{}, err
+	}
+	documents, err := projection.ProjectPaths(result.Paths, hierarchy)
+	if err != nil {
+		return RebuildResponse{}, err
+	}
+	if err := searchindex.Rebuild(cfg.IndexDirectory, documents); err != nil {
+		return RebuildResponse{}, err
+	}
+
+	return RebuildResponse{
+		IndexedFileCount:  len(result.Paths),
+		IndexedEntryCount: len(documents),
+		Warnings:          warningsFromDiscovery(result.Warnings),
+	}, nil
+}
+
 func warningsFromDiscovery(warnings []discovery.Warning) []Warning {
 	if len(warnings) == 0 {
 		return nil
@@ -226,7 +239,11 @@ func prepareFileUpdate(cfg config.Config, path string) (preparedFileUpdate, erro
 		return preparedFileUpdate{canonicalPath: canonicalPath, skipReason: UpdateFileSkipReasonOutsideCorpus}, nil
 	}
 
-	documents, err := projection.ProjectFile(corpusFile.Path)
+	hierarchy, err := taghierarchy.Load(cfg.NotesRoot)
+	if err != nil {
+		return preparedFileUpdate{}, err
+	}
+	documents, err := projection.ProjectFile(corpusFile.Path, hierarchy)
 	if err != nil {
 		return preparedFileUpdate{}, err
 	}
@@ -244,6 +261,18 @@ func findCorpusFile(cfg config.Config, canonicalPath string) (discovery.File, bo
 		}
 	}
 	return discovery.File{}, false, nil
+}
+
+func isTagHierarchyPath(notesRoot string, path string) (bool, error) {
+	canonicalPath, err := discovery.CanonicalizePath(path)
+	if err != nil {
+		return false, fmt.Errorf("canonicalize file path %q: %w", path, err)
+	}
+	tagHierarchyPath, err := discovery.CanonicalizePath(taghierarchy.FilePath(notesRoot))
+	if err != nil {
+		return false, fmt.Errorf("canonicalize tag hierarchy path %q: %w", taghierarchy.FilePath(notesRoot), err)
+	}
+	return canonicalPath == tagHierarchyPath, nil
 }
 
 func searchHitsFromIndex(notesRoot string, hits []searchindex.SearchHit) []SearchHit {

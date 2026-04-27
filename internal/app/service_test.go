@@ -220,6 +220,66 @@ outsidebody
 	}
 }
 
+func TestNewServiceUpdateFileRebuildsWholeIndexWhenTagsHierarchyChanges(t *testing.T) {
+	t.Helper()
+
+	rootDir := t.TempDir()
+	notesRoot := filepath.Join(rootDir, "notes")
+	indexDirectory := filepath.Join(rootDir, "index")
+	tagsPath := filepath.Join(notesRoot, "tags.org")
+	notePath := filepath.Join(notesRoot, "entry.org")
+	writeOrgFile(t, tagsPath, `#+TAGS: [ parent : child ]
+`)
+	writeOrgFile(t, notePath, `* Entry :child:
+:PROPERTIES:
+:ID: entry-id
+:END:
+body
+`)
+
+	configPath := filepath.Join(rootDir, "config.txtpb")
+	writeConfigFile(t, configPath, "notes_root: \""+notesRoot+"\"\nindex_directory: \""+indexDirectory+"\"")
+
+	service := NewService()
+	if _, err := service.Rebuild(context.Background(), RebuildRequest{ConfigPath: configPath}); err != nil {
+		t.Fatalf("rebuild index: %v", err)
+	}
+
+	searchResult, err := service.Search(context.Background(), SearchRequest{ConfigPath: configPath, Query: "+tag:parent +body"})
+	if err != nil {
+		t.Fatalf("search original expanded tag: %v", err)
+	}
+	if hits := searchResult.(SearchResponse).Hits; len(hits) != 1 || hits[0].ID != "entry-id" {
+		t.Fatalf("original tag hits = %+v, want entry-id", hits)
+	}
+
+	writeOrgFile(t, tagsPath, `#+TAGS: [ ancestor : child ]
+`)
+	updateResult, err := service.UpdateFile(context.Background(), UpdateFileRequest{ConfigPath: configPath, Path: tagsPath})
+	if err != nil {
+		t.Fatalf("update tag hierarchy file: %v", err)
+	}
+	if _, ok := updateResult.(RebuildResponse); !ok {
+		t.Fatalf("updateResult type = %T, want RebuildResponse for tag hierarchy rebuild", updateResult)
+	}
+
+	searchResult, err = service.Search(context.Background(), SearchRequest{ConfigPath: configPath, Query: "+tag:ancestor +body"})
+	if err != nil {
+		t.Fatalf("search rebuilt expanded tag: %v", err)
+	}
+	if hits := searchResult.(SearchResponse).Hits; len(hits) != 1 || hits[0].ID != "entry-id" {
+		t.Fatalf("rebuilt tag hits = %+v, want entry-id", hits)
+	}
+
+	searchResult, err = service.Search(context.Background(), SearchRequest{ConfigPath: configPath, Query: "+tag:parent +body"})
+	if err != nil {
+		t.Fatalf("search removed expanded tag: %v", err)
+	}
+	if hits := searchResult.(SearchResponse).Hits; len(hits) != 0 {
+		t.Fatalf("removed tag hits = %+v, want none", hits)
+	}
+}
+
 func TestNewServiceRebuildAndUpdateFileRespectExcludedDirectoryNames(t *testing.T) {
 	t.Helper()
 

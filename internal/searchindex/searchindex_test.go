@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 	"testing"
@@ -168,6 +169,7 @@ func TestRebuildStoresScheduledAndDeadlinePlanningFields(t *testing.T) {
 		ID:                   "planned-id",
 		Path:                 plannedPath,
 		Headline:             "Planned",
+		Tags:                 []string{"alpha-tag", "beta-tag"},
 		Category:             "work",
 		ScheduledDate:        "2026-04-28",
 		ScheduledMinuteOfDay: &scheduledMinuteOfDay,
@@ -192,7 +194,10 @@ func TestRebuildStoresScheduledAndDeadlinePlanningFields(t *testing.T) {
 		_ = index.Close()
 	}()
 
-	plannedFields := storedFieldsForDocumentID(t, index, "planned-id", []string{"category", "is_archived", "scheduled_date", "scheduled_minute_of_day", "deadline_date", "deadline_minute_of_day"})
+	plannedFields := storedFieldsForDocumentID(t, index, "planned-id", []string{"tag", "category", "is_archived", "scheduled_date", "scheduled_minute_of_day", "deadline_date", "deadline_minute_of_day"})
+	if got, want := mustStoredStrings(t, plannedFields, "tag"), []string{"alpha-tag", "beta-tag"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("tag = %#v, want %#v", got, want)
+	}
 	if got, want := plannedFields["category"], "work"; got != want {
 		t.Fatalf("category = %#v, want %#v", got, want)
 	}
@@ -313,8 +318,8 @@ func TestSearchPassesThroughBleveQueryStringSemantics(t *testing.T) {
 	firstPath := writeIndexFile(t, filepath.Join(t.TempDir(), "first.org"))
 	secondPath := writeIndexFile(t, filepath.Join(t.TempDir(), "second.org"))
 	if err := Rebuild(indexDir, []projection.EntryDocument{
-		{ID: "alpha-id", Path: firstPath, Headline: "Alpha Headline", Todo: "TODO", Category: "work", Body: "alpha bravo"},
-		{ID: "beta-id", Path: secondPath, Headline: "Beta Headline", Todo: "DONE", Category: "home", Body: "alpha"},
+		{ID: "alpha-id", Path: firstPath, Headline: "Alpha Headline", Todo: "TODO", Tags: []string{"team", "focused"}, Category: "work", Body: "alpha bravo"},
+		{ID: "beta-id", Path: secondPath, Headline: "Beta Headline", Todo: "DONE", Tags: []string{"team"}, Category: "home", Body: "alpha"},
 	}); err != nil {
 		t.Fatalf("rebuild index: %v", err)
 	}
@@ -350,6 +355,14 @@ func TestSearchPassesThroughBleveQueryStringSemantics(t *testing.T) {
 	if len(hits) != 1 || hits[0].ID != "alpha-id" {
 		t.Fatalf("category hits = %+v, want alpha-id only", hits)
 	}
+
+	hits, err = Search(indexDir, "+tag:focused +alpha")
+	if err != nil {
+		t.Fatalf("search tag exact query string: %v", err)
+	}
+	if len(hits) != 1 || hits[0].ID != "alpha-id" {
+		t.Fatalf("tag hits = %+v, want alpha-id only", hits)
+	}
 }
 
 func TestSearchReturnsRepairErrorWhenIndexIsMissing(t *testing.T) {
@@ -382,6 +395,24 @@ func storedFieldsForDocumentID(t *testing.T, index bleve.Index, id string, field
 		t.Fatalf("stored fields results = %#v, want exactly one result for %q", results, id)
 	}
 	return results[0]
+}
+
+func mustStoredStrings(t *testing.T, fields map[string]interface{}, key string) []string {
+	t.Helper()
+
+	rawValues, ok := fields[key].([]interface{})
+	if !ok {
+		t.Fatalf("stored field %q = %#v, want []interface{}", key, fields[key])
+	}
+	values := make([]string, 0, len(rawValues))
+	for _, rawValue := range rawValues {
+		value, ok := rawValue.(string)
+		if !ok {
+			t.Fatalf("stored field %q element = %#v, want string", key, rawValue)
+		}
+		values = append(values, value)
+	}
+	return values
 }
 
 func mustStoredFloat64(t *testing.T, fields map[string]interface{}, key string) float64 {

@@ -159,6 +159,9 @@ func indexDocuments(index bleve.Index, documents []projection.EntryDocument) err
 			"is_archived":    document.IsArchived,
 			"body":           document.Body,
 		}
+		if len(document.Tags) > 0 {
+			indexDocument["tag"] = document.Tags
+		}
 		if document.Category != "" {
 			indexDocument["category"] = document.Category
 		}
@@ -409,6 +412,10 @@ func newIndexMapping() *mapping.IndexMappingImpl {
 	isArchivedFieldMapping.Store = true
 	isArchivedFieldMapping.IncludeInAll = false
 
+	tagFieldMapping := bleve.NewKeywordFieldMapping()
+	tagFieldMapping.Store = true
+	tagFieldMapping.IncludeInAll = false
+
 	categoryFieldMapping := bleve.NewKeywordFieldMapping()
 	categoryFieldMapping.Store = true
 	categoryFieldMapping.IncludeInAll = false
@@ -439,6 +446,7 @@ func newIndexMapping() *mapping.IndexMappingImpl {
 	indexMapping.DefaultMapping.AddFieldMappingsAt("todo", todoFieldMapping)
 	indexMapping.DefaultMapping.AddFieldMappingsAt("is_done", isDoneFieldMapping)
 	indexMapping.DefaultMapping.AddFieldMappingsAt("is_archived", isArchivedFieldMapping)
+	indexMapping.DefaultMapping.AddFieldMappingsAt("tag", tagFieldMapping)
 	indexMapping.DefaultMapping.AddFieldMappingsAt("category", categoryFieldMapping)
 	indexMapping.DefaultMapping.AddFieldMappingsAt("scheduled_date", scheduledDateFieldMapping)
 	indexMapping.DefaultMapping.AddFieldMappingsAt("scheduled_minute_of_day", scheduledMinuteOfDayFieldMapping)

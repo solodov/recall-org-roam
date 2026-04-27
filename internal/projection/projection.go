@@ -15,6 +15,7 @@ import (
 	goorg "github.com/niklasfasching/go-org/org"
 
 	"org-search/internal/discovery"
+	"org-search/internal/taghierarchy"
 )
 
 // EntryDocument stores one indexable Org entry projected from a parsed subtree.
@@ -26,6 +27,7 @@ type EntryDocument struct {
 	Todo                 string
 	IsDone               bool
 	IsArchived           bool
+	Tags                 []string
 	Category             string
 	ScheduledDate        string
 	ScheduledMinuteOfDay *int
@@ -68,12 +70,12 @@ func (err DuplicateIDsError) Error() string {
 }
 
 // ProjectFile projects one Org file into entry documents keyed by Org ID.
-func ProjectFile(path string) ([]EntryDocument, error) {
-	return ProjectPaths([]string{path})
+func ProjectFile(path string, hierarchy taghierarchy.Hierarchy) ([]EntryDocument, error) {
+	return ProjectPaths([]string{path}, hierarchy)
 }
 
 // ProjectPaths projects one corpus-worth of Org files and rejects every duplicate Org ID it finds.
-func ProjectPaths(paths []string) ([]EntryDocument, error) {
+func ProjectPaths(paths []string, hierarchy taghierarchy.Hierarchy) ([]EntryDocument, error) {
 	projected := make([]EntryDocument, 0)
 	seenPaths := make(map[string]struct{}, len(paths))
 	occurrencesByID := make(map[string][]DuplicateIDOccurrence)
@@ -91,7 +93,7 @@ func ProjectPaths(paths []string) ([]EntryDocument, error) {
 		}
 		seenPaths[canonicalPath] = struct{}{}
 
-		fileDocuments, err := projectCanonicalFile(canonicalPath, visiblePath)
+		fileDocuments, err := projectCanonicalFile(canonicalPath, visiblePath, hierarchy)
 		if err != nil {
 			return nil, err
 		}
@@ -108,7 +110,7 @@ func ProjectPaths(paths []string) ([]EntryDocument, error) {
 	return projected, nil
 }
 
-func projectCanonicalFile(canonicalPath string, visiblePath string) ([]EntryDocument, error) {
+func projectCanonicalFile(canonicalPath string, visiblePath string, hierarchy taghierarchy.Hierarchy) ([]EntryDocument, error) {
 	raw, err := os.ReadFile(canonicalPath)
 	if err != nil {
 		return nil, fmt.Errorf("read org file %q: %w", canonicalPath, err)
@@ -123,13 +125,14 @@ func projectCanonicalFile(canonicalPath string, visiblePath string) ([]EntryDocu
 	todoKeywords := collectTodoKeywords(todoKeywordSetting(document))
 	doneKeywords := collectDoneKeywords(todoKeywordSetting(document))
 	fileCategory := fileCategory(document)
+	fileTags := parseFileTags(bufferSetting(document, "FILETAGS"))
 	for _, section := range document.Outline.Children {
-		collectSectionDocuments(section, visiblePath, canonicalPath, fileCategory, false, todoKeywords, doneKeywords, &projected)
+		collectSectionDocuments(section, visiblePath, canonicalPath, fileCategory, fileTags, false, todoKeywords, doneKeywords, hierarchy, &projected)
 	}
 	return projected, nil
 }
 
-func collectSectionDocuments(section *goorg.Section, visiblePath string, canonicalPath string, inheritedCategory string, inheritedArchived bool, todoKeywords []string, doneKeywords map[string]struct{}, projected *[]EntryDocument) {
+func collectSectionDocuments(section *goorg.Section, visiblePath string, canonicalPath string, inheritedCategory string, inheritedTags []string, inheritedArchived bool, todoKeywords []string, doneKeywords map[string]struct{}, hierarchy taghierarchy.Hierarchy, projected *[]EntryDocument) {
 	if section == nil || section.Headline == nil {
 		return
 	}
@@ -140,7 +143,9 @@ func collectSectionDocuments(section *goorg.Section, visiblePath string, canonic
 	if propertyCategory, ok := properties.Get("CATEGORY"); ok && strings.TrimSpace(propertyCategory) != "" {
 		category = strings.TrimSpace(propertyCategory)
 	}
-	archived := inheritedArchived || hasArchiveTag(section.Headline.Tags)
+	rawTags := inheritTags(inheritedTags, section.Headline.Tags)
+	expandedTags := hierarchy.Expand(rawTags)
+	archived := inheritedArchived || hasArchiveTag(rawTags)
 	planning := extractPlanningMetadata(directBodyNodes)
 	status, headline := projectedHeadlineMetadata(section.Headline, todoKeywords)
 	if id, ok := properties.Get("ID"); ok {
@@ -154,6 +159,7 @@ func collectSectionDocuments(section *goorg.Section, visiblePath string, canonic
 				Todo:                 status,
 				IsDone:               isDoneStatus(status, doneKeywords),
 				IsArchived:           archived,
+				Tags:                 expandedTags,
 				Category:             category,
 				ScheduledDate:        planning.scheduledDate,
 				ScheduledMinuteOfDay: planning.scheduledMinuteOfDay,
@@ -165,8 +171,36 @@ func collectSectionDocuments(section *goorg.Section, visiblePath string, canonic
 	}
 
 	for _, child := range section.Children {
-		collectSectionDocuments(child, visiblePath, canonicalPath, category, archived, todoKeywords, doneKeywords, projected)
+		collectSectionDocuments(child, visiblePath, canonicalPath, category, rawTags, archived, todoKeywords, doneKeywords, hierarchy, projected)
 	}
+}
+
+func inheritTags(inheritedTags []string, localTags []string) []string {
+	combined := make([]string, 0, len(inheritedTags)+len(localTags))
+	seen := make(map[string]struct{}, len(inheritedTags)+len(localTags))
+	for _, tag := range inheritedTags {
+		trimmedTag := strings.TrimSpace(tag)
+		if trimmedTag == "" {
+			continue
+		}
+		if _, ok := seen[trimmedTag]; ok {
+			continue
+		}
+		seen[trimmedTag] = struct{}{}
+		combined = append(combined, trimmedTag)
+	}
+	for _, tag := range localTags {
+		trimmedTag := strings.TrimSpace(tag)
+		if trimmedTag == "" {
+			continue
+		}
+		if _, ok := seen[trimmedTag]; ok {
+			continue
+		}
+		seen[trimmedTag] = struct{}{}
+		combined = append(combined, trimmedTag)
+	}
+	return combined
 }
 
 func hasArchiveTag(tags []string) bool {
@@ -176,6 +210,44 @@ func hasArchiveTag(tags []string) bool {
 		}
 	}
 	return false
+}
+
+func parseFileTags(raw string) []string {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+
+	tags := make([]string, 0)
+	seen := make(map[string]struct{})
+	for _, line := range strings.Split(raw, "\n") {
+		trimmedLine := strings.TrimSpace(line)
+		if trimmedLine == "" {
+			continue
+		}
+
+		var lineTags []string
+		if strings.Contains(trimmedLine, ":") {
+			parts := strings.Split(trimmedLine, ":")
+			lineTags = make([]string, 0, len(parts))
+			for _, part := range parts {
+				trimmedPart := strings.TrimSpace(part)
+				if trimmedPart != "" {
+					lineTags = append(lineTags, trimmedPart)
+				}
+			}
+		} else {
+			lineTags = strings.Fields(trimmedLine)
+		}
+
+		for _, tag := range lineTags {
+			if _, ok := seen[tag]; ok {
+				continue
+			}
+			seen[tag] = struct{}{}
+			tags = append(tags, tag)
+		}
+	}
+	return tags
 }
 
 func fileCategory(document *goorg.Document) string {
