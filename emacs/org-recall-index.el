@@ -63,8 +63,8 @@
 (defcustom org-recall-index-config-file nil
   "Optional txtpb config file passed to org-recall-index.
 
-Nil leaves config discovery to org-recall-index, which uses its default XDG config
-location."
+Nil leaves config discovery to org-recall-index, which uses its default XDG
+config location."
   :type '(choice (const :tag "Use org-recall-index default config discovery" nil)
                  (file :must-match nil))
   :group 'org-recall-index)

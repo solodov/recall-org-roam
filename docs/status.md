@@ -8,9 +8,9 @@ This file tracks plans managed in the markdown-backed layout.
 
 ### [20260428-143000-org-index-recall-provider-transition](./20260428-143000-org-index-recall-provider-transition.md)
 - title: org-search transition to org-index recall provider
-- status: implementing
-- currentPhase: 3
-- currentPhaseTitle: Move human rendering responsibility into Recall
+- status: done
+- currentPhase: none
+- currentPhaseTitle: none
 - nextPhase: none
 - nextPhaseTitle: none
 - totalPhases: 3

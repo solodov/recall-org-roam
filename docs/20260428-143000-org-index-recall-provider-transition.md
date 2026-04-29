@@ -1,10 +1,10 @@
 ---
 id: 20260428-143000-org-index-recall-provider-transition
 title: org-search transition to org-index recall provider
-status: implementing
+status: done
 created: 2026-04-28
 updated: 2026-04-29
-currentPhase: 3
+currentPhase: 
 externalRef: 
 origin: 
 ---
@@ -29,7 +29,7 @@ Phase 1 adds Recall provider integration while the repository is still named `or
 
 - [x] 1. Add Recall SDK provider integration behind the existing org-search CLI
 - [x] 2. Rename the package and binary to org-recall-index with no shims
-- [ ] 3. Move human rendering responsibility into Recall
+- [x] 3. Move human rendering responsibility into Recall
 
 ## Phase Details
 
