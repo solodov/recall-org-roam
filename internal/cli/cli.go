@@ -3,7 +3,6 @@ package cli
 import (
 	"context"
 	"io"
-	"strings"
 
 	"org-recall-index/internal/app"
 
@@ -39,7 +38,7 @@ func newRootCommand(stdin io.Reader, stdout io.Writer, options *renderOptions, s
 
 	command := &cobra.Command{
 		Use:           "org-recall-index",
-		Short:         "Index and search Org entries by ID",
+		Short:         "Index Org entries for recall",
 		SilenceErrors: true,
 		SilenceUsage:  true,
 		RunE: func(command *cobra.Command, _ []string) error {
@@ -51,7 +50,6 @@ func newRootCommand(stdin io.Reader, stdout io.Writer, options *renderOptions, s
 	command.AddCommand(
 		newRebuildCommand(stdout, options, service, &configPath),
 		newUpdateFileCommand(stdout, options, service, &configPath),
-		newSearchCommand(stdout, options, service, &configPath),
 		newRecallProviderCommand(stdin, stdout, service, &configPath),
 	)
 	return command
@@ -79,21 +77,6 @@ func newUpdateFileCommand(stdout io.Writer, options *renderOptions, service app.
 		Args:  cobra.ExactArgs(1),
 		RunE: func(command *cobra.Command, args []string) error {
 			result, err := service.UpdateFile(command.Context(), app.UpdateFileRequest{ConfigPath: *configPath, Path: args[0]})
-			if err != nil {
-				return err
-			}
-			return writeResult(stdout, result, options.jsonOutput)
-		},
-	}
-}
-
-func newSearchCommand(stdout io.Writer, options *renderOptions, service app.Service, configPath *string) *cobra.Command {
-	return &cobra.Command{
-		Use:   "search QUERY",
-		Short: "Run one org-recall-index query against indexed Org entries",
-		Args:  cobra.MinimumNArgs(1),
-		RunE: func(command *cobra.Command, args []string) error {
-			result, err := service.Search(command.Context(), app.SearchRequest{ConfigPath: *configPath, Query: strings.Join(args, " ")})
 			if err != nil {
 				return err
 			}

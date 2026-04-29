@@ -5,9 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/url"
-	"regexp"
-	"strings"
 
 	"org-recall-index/internal/app"
 	"org-recall-index/internal/projection"
@@ -23,8 +20,6 @@ func writeResult(writer io.Writer, value any, jsonOutput bool) error {
 		return writeHumanRebuild(writer, value)
 	case app.UpdateFileResponse:
 		return writeHumanUpdateFile(writer, value)
-	case app.SearchResponse:
-		return writeHumanSearch(writer, value)
 	default:
 		return writeJSON(writer, value)
 	}
@@ -74,96 +69,6 @@ func humanSkipReason(reason app.UpdateFileSkipReason) string {
 	default:
 		return string(reason)
 	}
-}
-
-func writeHumanSearch(writer io.Writer, response app.SearchResponse) error {
-	if len(response.Hits) == 0 {
-		_, err := io.WriteString(writer, "No matches\n")
-		return err
-	}
-	if _, err := fmt.Fprintf(writer, "%d matches\n", len(response.Hits)); err != nil {
-		return err
-	}
-	groups := groupSearchHitsByPath(response.Hits)
-	for index, group := range groups {
-		if index > 0 {
-			if _, err := io.WriteString(writer, "\n"); err != nil {
-				return err
-			}
-		}
-		if _, err := fmt.Fprintf(writer, "%s\n", fileTerminalLink(group.filePath, group.path)); err != nil {
-			return err
-		}
-		for _, hit := range group.hits {
-			if _, err := fmt.Fprintf(writer, "  - %s\n", orgRoamTerminalLink(hit.ID, plainSearchHeadline(hit.Headline))); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-func groupSearchHitsByPath(hits []app.SearchHit) []searchHitGroup {
-	groups := make([]searchHitGroup, 0)
-	groupIndexByPath := make(map[string]int, len(hits))
-	for _, hit := range hits {
-		path := strings.TrimSpace(hit.Path)
-		if path == "" {
-			path = "(unknown path)"
-		}
-		index, ok := groupIndexByPath[path]
-		if !ok {
-			index = len(groups)
-			groupIndexByPath[path] = index
-			groups = append(groups, searchHitGroup{path: path, filePath: strings.TrimSpace(hit.FilePath)})
-		}
-		groups[index].hits = append(groups[index].hits, hit)
-	}
-	return groups
-}
-
-type searchHitGroup struct {
-	path     string
-	filePath string
-	hits     []app.SearchHit
-}
-
-var (
-	orgBracketLinkWithDescriptionRegexp    = regexp.MustCompile(`\[\[[^\]]+\]\[([^\]]+)\]\]`)
-	orgBracketLinkWithoutDescriptionRegexp = regexp.MustCompile(`\[\[([^\]]+)\]\]`)
-)
-
-func orgRoamTerminalLink(id string, label string) string {
-	trimmedLabel := strings.TrimSpace(label)
-	if trimmedLabel == "" {
-		trimmedLabel = "(untitled)"
-	}
-	linkURL := "org-protocol://roam-node?node=" + url.QueryEscape(id)
-	return terminalLink(linkURL, trimmedLabel)
-}
-
-func fileTerminalLink(path string, label string) string {
-	trimmedLabel := strings.TrimSpace(label)
-	if trimmedLabel == "" {
-		trimmedLabel = "(unknown path)"
-	}
-	trimmedPath := strings.TrimSpace(path)
-	if trimmedPath == "" {
-		return trimmedLabel
-	}
-	linkURL := (&url.URL{Scheme: "file", Path: trimmedPath}).String()
-	return terminalLink(linkURL, trimmedLabel)
-}
-
-func terminalLink(linkURL string, label string) string {
-	return "\x1b]8;;" + linkURL + "\a\x1b[4m" + label + "\x1b[24m\x1b]8;;\a"
-}
-
-func plainSearchHeadline(headline string) string {
-	cleaned := strings.TrimSpace(headline)
-	cleaned = orgBracketLinkWithDescriptionRegexp.ReplaceAllString(cleaned, "$1")
-	cleaned = orgBracketLinkWithoutDescriptionRegexp.ReplaceAllString(cleaned, "$1")
-	return cleaned
 }
 
 func writeError(writer io.Writer, err error, jsonOutput bool) {
