@@ -364,32 +364,33 @@ func recallHitsFromSearchHits(hits []SearchHit) []*searchv1.SearchHit {
 }
 
 func recallHitFromSearchHit(hit SearchHit) *searchv1.SearchHit {
-	uris := []*searchv1.NamedUri{{Name: "open", Uri: orgRoamNodeURI(hit.ID)}}
-	if fileURI := fileURI(hit.FilePath); fileURI != "" {
-		uris = append(uris, &searchv1.NamedUri{Name: "file", Uri: fileURI})
+	targets := []*searchv1.OpenTarget{uriTarget(orgRoamNodeURI(hit.ID))}
+	if fileTarget := fileTarget(hit.FilePath); fileTarget != nil {
+		targets = append(targets, fileTarget)
 	}
 
 	return &searchv1.SearchHit{
-		Id:    hit.ID,
-		Kind:  "org_entry",
-		Title: plainRecallHeadline(hit.Headline),
-		Uris:  uris,
-		Group: recallGroupFromSearchHit(hit),
+		Id:      hit.ID,
+		Kind:    "org_entry",
+		Title:   plainRecallHeadline(hit.Headline),
+		Targets: targets,
+		Group:   recallGroupFromSearchHit(hit),
 	}
 }
 
 func recallGroupFromSearchHit(hit SearchHit) *searchv1.SearchGroup {
-	if strings.TrimSpace(hit.FilePath) == "" {
+	filePath := strings.TrimSpace(hit.FilePath)
+	if filePath == "" {
 		return nil
 	}
 	groupTitle := strings.TrimSpace(hit.Path)
 	if groupTitle == "" {
-		groupTitle = filepath.Base(hit.FilePath)
+		groupTitle = filepath.Base(filePath)
 	}
 	return &searchv1.SearchGroup{
-		Key:   "file:" + hit.FilePath,
-		Title: groupTitle,
-		Uris:  []*searchv1.NamedUri{{Name: "open", Uri: fileURI(hit.FilePath)}},
+		Key:     "file:" + filePath,
+		Title:   groupTitle,
+		Targets: []*searchv1.OpenTarget{fileTarget(filePath)},
 	}
 }
 
@@ -412,10 +413,14 @@ func orgRoamNodeURI(id string) string {
 	return "org-protocol://roam-node?node=" + url.QueryEscape(id)
 }
 
-func fileURI(path string) string {
+func uriTarget(uri string) *searchv1.OpenTarget {
+	return &searchv1.OpenTarget{Target: &searchv1.OpenTarget_Uri{Uri: &searchv1.UriTarget{Uri: uri}}}
+}
+
+func fileTarget(path string) *searchv1.OpenTarget {
 	trimmedPath := strings.TrimSpace(path)
 	if trimmedPath == "" {
-		return ""
+		return nil
 	}
-	return (&url.URL{Scheme: "file", Path: trimmedPath}).String()
+	return &searchv1.OpenTarget{Target: &searchv1.OpenTarget_File{File: &searchv1.FileTarget{Path: trimmedPath}}}
 }

@@ -62,8 +62,8 @@ github.com/niklasfasching/go-org v1.9.1/go.mod h1:ZAGFFkWvUQcpazmi/8nHqwvARpr1xp
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=
-github.com/solodov/recall v0.0.0-20260429011557-909af30ea648 h1:Gj83ZPG5/LI9v839slBYgqgJoepy3Ic5F0bEz1yFUac=
-github.com/solodov/recall v0.0.0-20260429011557-909af30ea648/go.mod h1:kduqp5RYvP5UPmn7DHtawEg5jUJDhEcK0LSheqi4KG4=
+github.com/solodov/recall v0.0.0-20260429123434-6841103b7a16 h1:3pAhjkXaMrwhRjdDBvM5u17+9KXl51BqiVtSWWOB8bY=
+github.com/solodov/recall v0.0.0-20260429123434-6841103b7a16/go.mod h1:Q6plATdpNFAFBI1sB8G6ov2ylh+hy/O3qO8HZ/UALew=
 github.com/spf13/cobra v1.10.2 h1:DMTTonx5m65Ic0GOoRY2c16WCbHxOOw6xxezuLaBpcU=
 github.com/spf13/cobra v1.10.2/go.mod h1:7C1pvHqHw5A4vrJfjNwvOdzYu0Gml16OCs2GRiTUUS4=
 github.com/spf13/pflag v1.0.9 h1:9exaQaMOCwffKiiiYk6/BndUBv+iRViNW+4lEMi0PvY=

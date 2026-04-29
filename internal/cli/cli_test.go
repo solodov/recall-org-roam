@@ -226,23 +226,23 @@ func TestRunServesRecallProviderWithTextprotoIO(t *testing.T) {
 	if got, want := hit.GetTitle(), "Find Alpha"; got != want {
 		t.Fatalf("title = %q, want %q", got, want)
 	}
-	if len(hit.GetUris()) != 2 {
-		t.Fatalf("uris = %+v, want open and file", hit.GetUris())
+	if len(hit.GetTargets()) != 2 {
+		t.Fatalf("targets = %+v, want org-roam URI and file", hit.GetTargets())
 	}
-	if got, want := hit.GetUris()[0].GetName(), "open"; got != want {
-		t.Fatalf("primary uri name = %q, want %q", got, want)
+	if got, want := hit.GetTargets()[0].GetUri().GetUri(), "org-protocol://roam-node?node=alpha-id"; got != want {
+		t.Fatalf("primary target uri = %q, want %q", got, want)
 	}
-	if got, want := hit.GetUris()[0].GetUri(), "org-protocol://roam-node?node=alpha-id"; got != want {
-		t.Fatalf("primary uri = %q, want %q", got, want)
-	}
-	if got, want := hit.GetUris()[1].GetUri(), "file:///notes/projects/model.org"; got != want {
-		t.Fatalf("file uri = %q, want %q", got, want)
+	if got, want := hit.GetTargets()[1].GetFile().GetPath(), "/notes/projects/model.org"; got != want {
+		t.Fatalf("file target path = %q, want %q", got, want)
 	}
 	if got, want := hit.GetGroup().GetKey(), "file:/notes/projects/model.org"; got != want {
 		t.Fatalf("group key = %q, want %q", got, want)
 	}
 	if got, want := hit.GetGroup().GetTitle(), "projects/model.org"; got != want {
 		t.Fatalf("group title = %q, want %q", got, want)
+	}
+	if got, want := hit.GetGroup().GetTargets()[0].GetFile().GetPath(), "/notes/projects/model.org"; got != want {
+		t.Fatalf("group file target path = %q, want %q", got, want)
 	}
 }
 
