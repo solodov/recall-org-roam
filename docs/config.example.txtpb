@@ -1,4 +1,4 @@
 notes_root: "~/org"
-index_directory: "~/.local/share/org-search/index"
+index_directory: "~/.local/share/org-recall-index/index"
 excluded_directory_names: "excluded-one"
 excluded_directory_names: "excluded-two"

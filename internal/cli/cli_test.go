@@ -11,8 +11,8 @@ import (
 	"google.golang.org/protobuf/encoding/prototext"
 	"google.golang.org/protobuf/proto"
 
-	"org-search/internal/app"
-	"org-search/internal/projection"
+	"org-recall-index/internal/app"
+	"org-recall-index/internal/projection"
 )
 
 type fakeService struct {

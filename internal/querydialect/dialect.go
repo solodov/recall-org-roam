@@ -1,4 +1,4 @@
-// Package querydialect layers org-search operators like is:overdue and due:today on top of raw Bleve query-string syntax while hiding archived entries by default.
+// Package querydialect layers org-recall-index operators like is:overdue and due:today on top of raw Bleve query-string syntax while hiding archived entries by default.
 package querydialect
 
 import (
@@ -11,7 +11,7 @@ import (
 	blevequery "github.com/blevesearch/bleve/v2/search/query"
 )
 
-// Compile turns one mixed org-search query into a Bleve query.
+// Compile turns one mixed org-recall-index query into a Bleve query.
 //
 // Raw Bleve query-string syntax stays available for all unrecognized tokens.
 // Recognized dialect operators are compiled into additional query filters and

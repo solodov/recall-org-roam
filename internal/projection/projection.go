@@ -1,4 +1,4 @@
-// Package projection turns Org files into org-search entry documents without exposing go-org types.
+// Package projection turns Org files into org-recall-index entry documents without exposing go-org types.
 package projection
 
 import (
@@ -14,8 +14,8 @@ import (
 
 	goorg "github.com/niklasfasching/go-org/org"
 
-	"org-search/internal/discovery"
-	"org-search/internal/taghierarchy"
+	"org-recall-index/internal/discovery"
+	"org-recall-index/internal/taghierarchy"
 )
 
 // EntryDocument stores one indexable Org entry projected from a parsed subtree.

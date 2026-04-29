@@ -5,13 +5,13 @@ import (
 	"io"
 	"strings"
 
-	"org-search/internal/app"
+	"org-recall-index/internal/app"
 
 	recallprovider "github.com/solodov/recall/provider"
 	"github.com/spf13/cobra"
 )
 
-// Run executes the org-search Cobra command tree and renders command results in human-readable or JSON form.
+// Run executes the org-recall-index Cobra command tree and renders command results in human-readable or JSON form.
 func Run(ctx context.Context, args []string, stdout io.Writer, stderr io.Writer, service app.Service) int {
 	return RunWithIO(ctx, args, nil, stdout, stderr, service)
 }
@@ -38,7 +38,7 @@ func newRootCommand(stdin io.Reader, stdout io.Writer, options *renderOptions, s
 	var configPath string
 
 	command := &cobra.Command{
-		Use:           "org-search",
+		Use:           "org-recall-index",
 		Short:         "Index and search Org entries by ID",
 		SilenceErrors: true,
 		SilenceUsage:  true,
@@ -90,7 +90,7 @@ func newUpdateFileCommand(stdout io.Writer, options *renderOptions, service app.
 func newSearchCommand(stdout io.Writer, options *renderOptions, service app.Service, configPath *string) *cobra.Command {
 	return &cobra.Command{
 		Use:   "search QUERY",
-		Short: "Run one org-search query against indexed Org entries",
+		Short: "Run one org-recall-index query against indexed Org entries",
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(command *cobra.Command, args []string) error {
 			result, err := service.Search(command.Context(), app.SearchRequest{ConfigPath: *configPath, Query: strings.Join(args, " ")})

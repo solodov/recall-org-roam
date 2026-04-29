@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"org-search/internal/taghierarchy"
+	"org-recall-index/internal/taghierarchy"
 )
 
 func TestProjectFileProjectsOnlyEntriesWithIDAndExcludesDescendantSubtrees(t *testing.T) {

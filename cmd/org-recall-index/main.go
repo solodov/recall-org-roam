@@ -4,8 +4,8 @@ import (
 	"context"
 	"os"
 
-	"org-search/internal/app"
-	"org-search/internal/cli"
+	"org-recall-index/internal/app"
+	"org-recall-index/internal/cli"
 )
 
 // main wires the Cobra command surface to the application service.

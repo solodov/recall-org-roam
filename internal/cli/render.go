@@ -9,8 +9,8 @@ import (
 	"regexp"
 	"strings"
 
-	"org-search/internal/app"
-	"org-search/internal/projection"
+	"org-recall-index/internal/app"
+	"org-recall-index/internal/projection"
 )
 
 func writeResult(writer io.Writer, value any, jsonOutput bool) error {

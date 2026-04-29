@@ -1,0 +1,13 @@
+# Example recall provider entry for the Org index backend.
+# Add this provider to your recall config after installing org-recall-index.
+providers {
+  id: "org"
+  enabled: true
+  weight: 1.0
+  timeout_ms: 1500
+  default_limit: 30
+  stdio {
+    command: "org-recall-index"
+    args: "recall-provider"
+  }
+}

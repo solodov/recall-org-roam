@@ -1,4 +1,4 @@
-module org-search
+module org-recall-index
 
 go 1.26
 

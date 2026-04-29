@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"org-search/internal/gen/configpb"
+	"org-recall-index/internal/gen/configpb"
 
 	"google.golang.org/protobuf/encoding/prototext"
 )
@@ -16,7 +16,7 @@ const (
 	defaultIndexDirectoryName = "index"
 )
 
-// Config stores the normalized org-search runtime configuration.
+// Config stores the normalized org-recall-index runtime configuration.
 type Config struct {
 	NotesRoot              string
 	IndexDirectory         string
@@ -163,14 +163,14 @@ func defaultConfigPath() (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("XDG_CONFIG_HOME: %w", err)
 		}
-		return filepath.Join(normalized, "org-search", defaultConfigFileName), nil
+		return filepath.Join(normalized, "org-recall-index", defaultConfigFileName), nil
 	}
 
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("resolve home directory: %w", err)
 	}
-	return filepath.Join(home, ".config", "org-search", defaultConfigFileName), nil
+	return filepath.Join(home, ".config", "org-recall-index", defaultConfigFileName), nil
 }
 
 func defaultIndexDirectory() (string, error) {
@@ -180,12 +180,12 @@ func defaultIndexDirectory() (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("XDG_DATA_HOME: %w", err)
 		}
-		return filepath.Join(normalized, "org-search", defaultIndexDirectoryName), nil
+		return filepath.Join(normalized, "org-recall-index", defaultIndexDirectoryName), nil
 	}
 
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("resolve home directory: %w", err)
 	}
-	return filepath.Join(home, ".local", "share", "org-search", defaultIndexDirectoryName), nil
+	return filepath.Join(home, ".local", "share", "org-recall-index", defaultIndexDirectoryName), nil
 }

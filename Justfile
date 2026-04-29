@@ -1,8 +1,8 @@
 set positional-arguments
 set script-interpreter := ["bash", "-euo", "pipefail"]
 
-module := "org-search"
-binary := "org-search"
+module := "org-recall-index"
+binary := "org-recall-index"
 
 [script]
 generate-proto:
@@ -37,14 +37,14 @@ build: generate-proto
     go build ./...
     go build -o "dist/{{binary}}" "./cmd/{{binary}}"
 
-    if [[ -f emacs/org-bleve-index.el ]]; then
+    if [[ -f emacs/org-recall-index.el ]]; then
       if ! command -v emacs >/dev/null 2>&1; then
         echo "emacs is required to build the Emacs package" >&2
         exit 1
       fi
 
-      emacs --batch -Q -L emacs -f batch-byte-compile emacs/org-bleve-index.el
-      rm -f emacs/org-bleve-index.elc
+      emacs --batch -Q -L emacs -f batch-byte-compile emacs/org-recall-index.el
+      rm -f emacs/org-recall-index.elc
     fi
 
 [script]
@@ -146,7 +146,7 @@ test *paths: generate-proto
         exit 1
       fi
 
-      emacs --batch -Q -L emacs -l emacs/org-bleve-index-test.el -f ert-run-tests-batch-and-exit
+      emacs --batch -Q -L emacs -l emacs/org-recall-index-test.el -f ert-run-tests-batch-and-exit
     fi
 
 [script]
