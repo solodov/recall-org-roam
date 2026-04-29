@@ -6,6 +6,11 @@ import (
 	"strings"
 	"testing"
 
+	searchv1 "github.com/solodov/recall/proto/recall/search/v1"
+
+	"google.golang.org/protobuf/encoding/prototext"
+	"google.golang.org/protobuf/proto"
+
 	"org-search/internal/app"
 	"org-search/internal/projection"
 )
@@ -202,6 +207,134 @@ func TestRunDispatchesSearchCommandWithJSONMetadataOutput(t *testing.T) {
 	}
 }
 
+func TestRunServesRecallProviderWithTextprotoIO(t *testing.T) {
+	t.Helper()
+
+	service := &fakeService{searchResponse: app.SearchResponse{Hits: []app.SearchHit{{ID: "alpha-id", Path: "projects/model.org", FilePath: "/notes/projects/model.org", Headline: "Find [[https://example.invalid][Alpha]]"}}}}
+	requestBytes := mustMarshalTextproto(t, &searchv1.SearchRequest{Query: "alpha", Limit: proto.Uint32(1)})
+	var stdout strings.Builder
+	var stderr strings.Builder
+
+	exitCode := RunWithIO(context.Background(), []string{"--config", "/tmp/config.txtpb", "recall-provider", searchv1.SearchProviderSearchPath}, strings.NewReader(string(requestBytes)), &stdout, &stderr, service)
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0; stderr = %q", exitCode, stderr.String())
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q, want empty", stderr.String())
+	}
+	if got, want := service.searchRequest.ConfigPath, "/tmp/config.txtpb"; got != want {
+		t.Fatalf("configPath = %q, want %q", got, want)
+	}
+	if got, want := service.searchRequest.Query, "alpha"; got != want {
+		t.Fatalf("query = %q, want %q", got, want)
+	}
+	if got, want := service.searchRequest.Limit, 1; got != want {
+		t.Fatalf("limit = %d, want %d", got, want)
+	}
+
+	var response searchv1.SearchResponse
+	if err := prototext.Unmarshal([]byte(stdout.String()), &response); err != nil {
+		t.Fatalf("decode response: %v; stdout = %q", err, stdout.String())
+	}
+	if len(response.Hits) != 1 {
+		t.Fatalf("hits = %+v, want one hit", response.Hits)
+	}
+	hit := response.Hits[0]
+	if got, want := hit.GetId(), "alpha-id"; got != want {
+		t.Fatalf("id = %q, want %q", got, want)
+	}
+	if got, want := hit.GetKind(), "org_entry"; got != want {
+		t.Fatalf("kind = %q, want %q", got, want)
+	}
+	if got, want := hit.GetTitle(), "Find Alpha"; got != want {
+		t.Fatalf("title = %q, want %q", got, want)
+	}
+	if len(hit.GetUris()) != 2 {
+		t.Fatalf("uris = %+v, want open and file", hit.GetUris())
+	}
+	if got, want := hit.GetUris()[0].GetName(), "open"; got != want {
+		t.Fatalf("primary uri name = %q, want %q", got, want)
+	}
+	if got, want := hit.GetUris()[0].GetUri(), "org-protocol://roam-node?node=alpha-id"; got != want {
+		t.Fatalf("primary uri = %q, want %q", got, want)
+	}
+	if got, want := hit.GetUris()[1].GetUri(), "file:///notes/projects/model.org"; got != want {
+		t.Fatalf("file uri = %q, want %q", got, want)
+	}
+	if got, want := hit.GetGroup().GetKey(), "file:/notes/projects/model.org"; got != want {
+		t.Fatalf("group key = %q, want %q", got, want)
+	}
+	if got, want := hit.GetGroup().GetTitle(), "projects/model.org"; got != want {
+		t.Fatalf("group title = %q, want %q", got, want)
+	}
+}
+
+func TestRunServesRecallProviderWithBinaryIO(t *testing.T) {
+	t.Helper()
+
+	service := &fakeService{searchResponse: app.SearchResponse{Hits: []app.SearchHit{{ID: "alpha-id", Headline: "Alpha"}}}}
+	requestBytes, err := proto.Marshal(&searchv1.SearchRequest{Query: "alpha"})
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	var stdout strings.Builder
+	var stderr strings.Builder
+
+	exitCode := RunWithIO(context.Background(), []string{"recall-provider", searchv1.SearchProviderSearchPath}, strings.NewReader(string(requestBytes)), &stdout, &stderr, service)
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0; stderr = %q", exitCode, stderr.String())
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q, want empty", stderr.String())
+	}
+	var response searchv1.SearchResponse
+	if err := proto.Unmarshal([]byte(stdout.String()), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(response.Hits) != 1 || response.Hits[0].GetId() != "alpha-id" {
+		t.Fatalf("hits = %+v, want alpha-id", response.Hits)
+	}
+}
+
+func TestRunRecallProviderRejectsMalformedInput(t *testing.T) {
+	t.Helper()
+
+	service := &fakeService{}
+	var stdout strings.Builder
+	var stderr strings.Builder
+
+	exitCode := RunWithIO(context.Background(), []string{"recall-provider", searchv1.SearchProviderSearchPath}, strings.NewReader("not protobuf"), &stdout, &stderr, service)
+	if exitCode != 1 {
+		t.Fatalf("exitCode = %d, want 1", exitCode)
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty", stdout.String())
+	}
+	if got := stderr.String(); !strings.Contains(got, "decode request") {
+		t.Fatalf("stderr = %q, want decode request error", got)
+	}
+}
+
+func TestRunRecallProviderRendersSearchErrorsToStderr(t *testing.T) {
+	t.Helper()
+
+	service := &fakeService{searchError: errors.New("search failed")}
+	requestBytes := mustMarshalTextproto(t, &searchv1.SearchRequest{Query: "alpha"})
+	var stdout strings.Builder
+	var stderr strings.Builder
+
+	exitCode := RunWithIO(context.Background(), []string{"recall-provider", searchv1.SearchProviderSearchPath}, strings.NewReader(string(requestBytes)), &stdout, &stderr, service)
+	if exitCode != 1 {
+		t.Fatalf("exitCode = %d, want 1", exitCode)
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty", stdout.String())
+	}
+	if got, want := stderr.String(), "Error: search failed\n"; got != want {
+		t.Fatalf("stderr = %q, want %q", got, want)
+	}
+}
+
 func TestRunRendersNoMatchesHumanReadable(t *testing.T) {
 	t.Helper()
 
@@ -301,4 +434,13 @@ func TestRunRendersErrorsAsJSONWithFlag(t *testing.T) {
 	if got, want := stderr.String(), "{\"error\":\"boom\"}\n"; got != want {
 		t.Fatalf("stderr = %q, want %q", got, want)
 	}
+}
+
+func mustMarshalTextproto(t *testing.T, message proto.Message) []byte {
+	t.Helper()
+	encoded, err := prototext.Marshal(message)
+	if err != nil {
+		t.Fatalf("marshal textproto: %v", err)
+	}
+	return encoded
 }

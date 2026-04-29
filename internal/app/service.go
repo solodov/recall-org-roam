@@ -3,9 +3,14 @@ package app
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
+
+	searchv1 "github.com/solodov/recall/proto/recall/search/v1"
+	recallprovider "github.com/solodov/recall/provider"
 
 	"org-search/internal/config"
 	"org-search/internal/discovery"
@@ -80,6 +85,7 @@ type UpdateFileResponse struct {
 type SearchRequest struct {
 	ConfigPath string
 	Query      string
+	Limit      int
 }
 
 // SearchResponse stores the JSON result for one Bleve query-string search.
@@ -160,7 +166,43 @@ func (service) Search(_ context.Context, request SearchRequest) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return SearchResponse{Hits: searchHitsFromIndex(cfg.NotesRoot, hits)}, nil
+	return SearchResponse{Hits: limitSearchHits(searchHitsFromIndex(cfg.NotesRoot, hits), request.Limit)}, nil
+}
+
+// RecallProvider adapts the Org search service to recall's SearchProvider SDK.
+type RecallProvider struct {
+	service    Service
+	configPath string
+}
+
+// NewRecallProvider returns a recall SearchProvider backed by the Org index service.
+func NewRecallProvider(service Service, configPath string) *RecallProvider {
+	if service == nil {
+		service = NewService()
+	}
+	return &RecallProvider{service: service, configPath: configPath}
+}
+
+// Search handles one recall search request and maps Org hits into portable recall results.
+func (provider *RecallProvider) Search(ctx context.Context, request *searchv1.SearchRequest) (*searchv1.SearchResponse, error) {
+	if request == nil {
+		return nil, fmt.Errorf("search request is nil")
+	}
+	query := strings.TrimSpace(request.GetQuery())
+	if query == "" {
+		return nil, fmt.Errorf("query must be non-empty")
+	}
+	limit, _ := recallprovider.RequestedLimit(request)
+
+	result, err := provider.service.Search(ctx, SearchRequest{ConfigPath: provider.configPath, Query: query, Limit: limit})
+	if err != nil {
+		return nil, err
+	}
+	response, ok := result.(SearchResponse)
+	if !ok {
+		return nil, fmt.Errorf("search result type %T, want app.SearchResponse", result)
+	}
+	return &searchv1.SearchResponse{Hits: recallHitsFromSearchHits(response.Hits)}, nil
 }
 
 func loadConfig(path string) (config.Config, error) {
@@ -301,4 +343,79 @@ func relativeSearchHitPath(notesRoot string, path string) string {
 		return path
 	}
 	return filepath.ToSlash(relativePath)
+}
+
+func limitSearchHits(hits []SearchHit, limit int) []SearchHit {
+	if limit <= 0 || len(hits) <= limit {
+		return hits
+	}
+	return hits[:limit]
+}
+
+func recallHitsFromSearchHits(hits []SearchHit) []*searchv1.SearchHit {
+	if len(hits) == 0 {
+		return nil
+	}
+	converted := make([]*searchv1.SearchHit, 0, len(hits))
+	for _, hit := range hits {
+		converted = append(converted, recallHitFromSearchHit(hit))
+	}
+	return converted
+}
+
+func recallHitFromSearchHit(hit SearchHit) *searchv1.SearchHit {
+	uris := []*searchv1.NamedUri{{Name: "open", Uri: orgRoamNodeURI(hit.ID)}}
+	if fileURI := fileURI(hit.FilePath); fileURI != "" {
+		uris = append(uris, &searchv1.NamedUri{Name: "file", Uri: fileURI})
+	}
+
+	return &searchv1.SearchHit{
+		Id:    hit.ID,
+		Kind:  "org_entry",
+		Title: plainRecallHeadline(hit.Headline),
+		Uris:  uris,
+		Group: recallGroupFromSearchHit(hit),
+	}
+}
+
+func recallGroupFromSearchHit(hit SearchHit) *searchv1.SearchGroup {
+	if strings.TrimSpace(hit.FilePath) == "" {
+		return nil
+	}
+	groupTitle := strings.TrimSpace(hit.Path)
+	if groupTitle == "" {
+		groupTitle = filepath.Base(hit.FilePath)
+	}
+	return &searchv1.SearchGroup{
+		Key:   "file:" + hit.FilePath,
+		Title: groupTitle,
+		Uris:  []*searchv1.NamedUri{{Name: "open", Uri: fileURI(hit.FilePath)}},
+	}
+}
+
+var (
+	recallOrgBracketLinkWithDescriptionRegexp    = regexp.MustCompile(`\[\[[^\]]+\]\[([^\]]+)\]\]`)
+	recallOrgBracketLinkWithoutDescriptionRegexp = regexp.MustCompile(`\[\[([^\]]+)\]\]`)
+)
+
+func plainRecallHeadline(headline string) string {
+	cleaned := strings.TrimSpace(headline)
+	cleaned = recallOrgBracketLinkWithDescriptionRegexp.ReplaceAllString(cleaned, "$1")
+	cleaned = recallOrgBracketLinkWithoutDescriptionRegexp.ReplaceAllString(cleaned, "$1")
+	if cleaned == "" {
+		return "(untitled)"
+	}
+	return cleaned
+}
+
+func orgRoamNodeURI(id string) string {
+	return "org-protocol://roam-node?node=" + url.QueryEscape(id)
+}
+
+func fileURI(path string) string {
+	trimmedPath := strings.TrimSpace(path)
+	if trimmedPath == "" {
+		return ""
+	}
+	return (&url.URL{Scheme: "file", Path: trimmedPath}).String()
 }

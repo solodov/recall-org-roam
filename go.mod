@@ -3,10 +3,16 @@ module org-search
 go 1.26
 
 require (
+	github.com/blevesearch/bleve/v2 v2.5.7
+	github.com/niklasfasching/go-org v1.9.1
+	github.com/solodov/recall v0.0.0-20260429011557-909af30ea648
+	github.com/spf13/cobra v1.10.2
+	google.golang.org/protobuf v1.36.11
+)
+
+require (
 	github.com/RoaringBitmap/roaring/v2 v2.4.5 // indirect
-	github.com/alecthomas/chroma/v2 v2.5.0 // indirect
 	github.com/bits-and-blooms/bitset v1.22.0 // indirect
-	github.com/blevesearch/bleve/v2 v2.5.7 // indirect
 	github.com/blevesearch/bleve_index_api v1.2.11 // indirect
 	github.com/blevesearch/geo v0.2.4 // indirect
 	github.com/blevesearch/go-faiss v1.0.26 // indirect
@@ -24,16 +30,12 @@ require (
 	github.com/blevesearch/zapx/v14 v14.4.2 // indirect
 	github.com/blevesearch/zapx/v15 v15.4.2 // indirect
 	github.com/blevesearch/zapx/v16 v16.2.8 // indirect
-	github.com/dlclark/regexp2 v1.4.0 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/json-iterator/go v0.0.0-20171115153421-f7279a603ede // indirect
 	github.com/mschoch/smat v0.2.0 // indirect
-	github.com/niklasfasching/go-org v1.9.1 // indirect
-	github.com/spf13/cobra v1.10.2 // indirect
 	github.com/spf13/pflag v1.0.9 // indirect
 	go.etcd.io/bbolt v1.4.0 // indirect
-	golang.org/x/net v0.38.0 // indirect
-	golang.org/x/sys v0.31.0 // indirect
-	google.golang.org/protobuf v1.36.11 // indirect
+	golang.org/x/net v0.49.0 // indirect
+	golang.org/x/sys v0.40.0 // indirect
 )

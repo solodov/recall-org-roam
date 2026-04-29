@@ -7,17 +7,23 @@ import (
 
 	"org-search/internal/app"
 
+	recallprovider "github.com/solodov/recall/provider"
 	"github.com/spf13/cobra"
 )
 
 // Run executes the org-search Cobra command tree and renders command results in human-readable or JSON form.
 func Run(ctx context.Context, args []string, stdout io.Writer, stderr io.Writer, service app.Service) int {
+	return RunWithIO(ctx, args, nil, stdout, stderr, service)
+}
+
+// RunWithIO executes the command tree with explicit streams for stdio provider integrations.
+func RunWithIO(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer, service app.Service) int {
 	if service == nil {
 		service = app.NewService()
 	}
 
 	options := renderOptions{}
-	command := newRootCommand(stdout, &options, service)
+	command := newRootCommand(stdin, stdout, &options, service)
 	command.SetOut(stdout)
 	command.SetErr(stderr)
 	command.SetArgs(args)
@@ -28,7 +34,7 @@ func Run(ctx context.Context, args []string, stdout io.Writer, stderr io.Writer,
 	return 0
 }
 
-func newRootCommand(stdout io.Writer, options *renderOptions, service app.Service) *cobra.Command {
+func newRootCommand(stdin io.Reader, stdout io.Writer, options *renderOptions, service app.Service) *cobra.Command {
 	var configPath string
 
 	command := &cobra.Command{
@@ -46,6 +52,7 @@ func newRootCommand(stdout io.Writer, options *renderOptions, service app.Servic
 		newRebuildCommand(stdout, options, service, &configPath),
 		newUpdateFileCommand(stdout, options, service, &configPath),
 		newSearchCommand(stdout, options, service, &configPath),
+		newRecallProviderCommand(stdin, stdout, service, &configPath),
 	)
 	return command
 }
@@ -91,6 +98,22 @@ func newSearchCommand(stdout io.Writer, options *renderOptions, service app.Serv
 				return err
 			}
 			return writeResult(stdout, result, options.jsonOutput)
+		},
+	}
+}
+
+func newRecallProviderCommand(stdin io.Reader, stdout io.Writer, service app.Service, configPath *string) *cobra.Command {
+	return &cobra.Command{
+		Use:    "recall-provider RPC_PATH",
+		Short:  "Serve one recall SearchProvider request over stdio",
+		Hidden: true,
+		Args:   cobra.ExactArgs(1),
+		RunE: func(command *cobra.Command, args []string) error {
+			return recallprovider.ServeSearchWithOptions(command.Context(), app.NewRecallProvider(service, *configPath), recallprovider.ServeOptions{
+				Stdin:  stdin,
+				Stdout: stdout,
+				Args:   args,
+			})
 		},
 	}
 }
