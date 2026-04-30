@@ -188,7 +188,7 @@ func TestRunServesRecallProviderWithTextprotoIO(t *testing.T) {
 	t.Helper()
 
 	service := &fakeService{searchResponse: app.SearchResponse{Hits: []app.SearchHit{{ID: "alpha-id", Path: "projects/model.org", FilePath: "/notes/projects/model.org", Headline: "Find [[https://example.invalid][Alpha]]"}}}}
-	requestBytes := mustMarshalTextproto(t, &searchv1.SearchRequest{Query: "alpha", Limit: proto.Uint32(1)})
+	requestBytes := mustMarshalTextproto(t, &searchv1.SearchRequest{Query: "alpha", Limit: proto.Uint32(1), SelectorHints: []string{"entry"}})
 	var stdout strings.Builder
 	var stderr strings.Builder
 
@@ -220,8 +220,8 @@ func TestRunServesRecallProviderWithTextprotoIO(t *testing.T) {
 	if got, want := hit.GetId(), "alpha-id"; got != want {
 		t.Fatalf("id = %q, want %q", got, want)
 	}
-	if got, want := hit.GetKind(), "org_entry"; got != want {
-		t.Fatalf("kind = %q, want %q", got, want)
+	if got, want := hit.GetSelector(), "entry:content"; got != want {
+		t.Fatalf("selector = %q, want %q", got, want)
 	}
 	if got, want := hit.GetTitle(), "Find Alpha"; got != want {
 		t.Fatalf("title = %q, want %q", got, want)
@@ -243,6 +243,69 @@ func TestRunServesRecallProviderWithTextprotoIO(t *testing.T) {
 	}
 	if got, want := hit.GetGroup().GetTargets()[0].GetFile().GetPath(), "/notes/projects/model.org"; got != want {
 		t.Fatalf("group file target path = %q, want %q", got, want)
+	}
+}
+
+func TestRunServesRecallProviderCapabilitiesWithTextprotoIO(t *testing.T) {
+	t.Helper()
+
+	service := &fakeService{}
+	requestBytes := mustMarshalTextproto(t, &searchv1.ListCapabilitiesRequest{})
+	var stdout strings.Builder
+	var stderr strings.Builder
+
+	exitCode := RunWithIO(context.Background(), []string{"recall-provider", searchv1.SearchProviderListCapabilitiesPath}, strings.NewReader(string(requestBytes)), &stdout, &stderr, service)
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0; stderr = %q", exitCode, stderr.String())
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q, want empty", stderr.String())
+	}
+	if service.searchRequest.Query != "" {
+		t.Fatalf("search request = %+v, want no index search", service.searchRequest)
+	}
+
+	var response searchv1.ListCapabilitiesResponse
+	if err := prototext.Unmarshal([]byte(stdout.String()), &response); err != nil {
+		t.Fatalf("decode response: %v; stdout = %q", err, stdout.String())
+	}
+	if len(response.Surfaces) != 1 {
+		t.Fatalf("surfaces = %+v, want one surface", response.Surfaces)
+	}
+	surface := response.Surfaces[0]
+	if got, want := surface.GetSelector(), "entry:content"; got != want {
+		t.Fatalf("selector = %q, want %q", got, want)
+	}
+	if got, want := surface.GetTitle(), "Org entries"; got != want {
+		t.Fatalf("title = %q, want %q", got, want)
+	}
+	if got := surface.GetDescription(); !strings.Contains(got, "Org entry") {
+		t.Fatalf("description = %q, want Org entry explanation", got)
+	}
+}
+
+func TestRunRecallProviderSkipsUnrequestedSelectors(t *testing.T) {
+	t.Helper()
+
+	service := &fakeService{searchResponse: app.SearchResponse{Hits: []app.SearchHit{{ID: "alpha-id", Headline: "Alpha"}}}}
+	requestBytes := mustMarshalTextproto(t, &searchv1.SearchRequest{Query: "alpha", SelectorHints: []string{"file"}})
+	var stdout strings.Builder
+	var stderr strings.Builder
+
+	exitCode := RunWithIO(context.Background(), []string{"recall-provider", searchv1.SearchProviderSearchPath}, strings.NewReader(string(requestBytes)), &stdout, &stderr, service)
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0; stderr = %q", exitCode, stderr.String())
+	}
+	if service.searchRequest.Query != "" {
+		t.Fatalf("search request = %+v, want no index search", service.searchRequest)
+	}
+
+	var response searchv1.SearchResponse
+	if err := prototext.Unmarshal([]byte(stdout.String()), &response); err != nil {
+		t.Fatalf("decode response: %v; stdout = %q", err, stdout.String())
+	}
+	if len(response.Hits) != 0 {
+		t.Fatalf("hits = %+v, want no hits for unrequested selector", response.Hits)
 	}
 }
 
@@ -270,6 +333,9 @@ func TestRunServesRecallProviderWithBinaryIO(t *testing.T) {
 	}
 	if len(response.Hits) != 1 || response.Hits[0].GetId() != "alpha-id" {
 		t.Fatalf("hits = %+v, want alpha-id", response.Hits)
+	}
+	if got, want := response.Hits[0].GetSelector(), "entry:content"; got != want {
+		t.Fatalf("selector = %q, want %q", got, want)
 	}
 }
 

@@ -183,6 +183,17 @@ func NewRecallProvider(service Service, configPath string) *RecallProvider {
 	return &RecallProvider{service: service, configPath: configPath}
 }
 
+const orgEntryContentSelector = "entry:content"
+
+// ListCapabilities advertises the Org entry selector without touching the index.
+func (provider *RecallProvider) ListCapabilities(context.Context, *searchv1.ListCapabilitiesRequest) (*searchv1.ListCapabilitiesResponse, error) {
+	return &searchv1.ListCapabilitiesResponse{Surfaces: []*searchv1.SearchSurface{{
+		Selector:    orgEntryContentSelector,
+		Title:       "Org entries",
+		Description: "Search Org entry headlines, outlines, tags, and body text",
+	}}}, nil
+}
+
 // Search handles one recall search request and maps Org hits into portable recall results.
 func (provider *RecallProvider) Search(ctx context.Context, request *searchv1.SearchRequest) (*searchv1.SearchResponse, error) {
 	if request == nil {
@@ -193,6 +204,9 @@ func (provider *RecallProvider) Search(ctx context.Context, request *searchv1.Se
 		return nil, fmt.Errorf("query must be non-empty")
 	}
 	limit, _ := recallprovider.RequestedLimit(request)
+	if !selectorHintsIncludeSurface(request.GetSelectorHints(), orgEntryContentSelector) {
+		return &searchv1.SearchResponse{}, nil
+	}
 
 	result, err := provider.service.Search(ctx, SearchRequest{ConfigPath: provider.configPath, Query: query, Limit: limit})
 	if err != nil {
@@ -370,12 +384,27 @@ func recallHitFromSearchHit(hit SearchHit) *searchv1.SearchHit {
 	}
 
 	return &searchv1.SearchHit{
-		Id:      hit.ID,
-		Kind:    "org_entry",
-		Title:   plainRecallHeadline(hit.Headline),
-		Targets: targets,
-		Group:   recallGroupFromSearchHit(hit),
+		Id:       hit.ID,
+		Selector: orgEntryContentSelector,
+		Title:    plainRecallHeadline(hit.Headline),
+		Targets:  targets,
+		Group:    recallGroupFromSearchHit(hit),
 	}
+}
+
+func selectorHintsIncludeSurface(hints []string, surface string) bool {
+	hasHint := false
+	for _, hint := range hints {
+		hint = strings.TrimSpace(hint)
+		if hint == "" {
+			continue
+		}
+		hasHint = true
+		if hint == surface || strings.HasPrefix(surface, hint+":") {
+			return true
+		}
+	}
+	return !hasHint
 }
 
 func recallGroupFromSearchHit(hit SearchHit) *searchv1.SearchGroup {

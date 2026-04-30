@@ -88,7 +88,7 @@ func newUpdateFileCommand(stdout io.Writer, options *renderOptions, service app.
 func newRecallProviderCommand(stdin io.Reader, stdout io.Writer, service app.Service, configPath *string) *cobra.Command {
 	return &cobra.Command{
 		Use:    "recall-provider RPC_PATH",
-		Short:  "Serve one recall SearchProvider request over stdio",
+		Short:  "Serve one recall SearchProvider RPC over stdio",
 		Hidden: true,
 		Args:   cobra.ExactArgs(1),
 		RunE: func(command *cobra.Command, args []string) error {
