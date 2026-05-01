@@ -12,7 +12,7 @@ func TestLoadReadsConfigFile(t *testing.T) {
 
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
-	t.Setenv("XDG_DATA_HOME", filepath.Join(homeDir, ".local", "share"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(homeDir, ".cache"))
 
 	configPath := filepath.Join(t.TempDir(), "config.txtpb")
 	raw := `notes_root: "~/org"`
@@ -30,37 +30,37 @@ func TestLoadReadsConfigFile(t *testing.T) {
 	}
 }
 
-func TestLoadBytesDefaultsIndexDirectoryFromXDGDataHome(t *testing.T) {
+func TestLoadBytesDefaultsIndexDirectoryFromXDGCacheHome(t *testing.T) {
 	t.Helper()
 
 	homeDir := t.TempDir()
-	xdgDataHome := filepath.Join(homeDir, "xdg-data")
+	xdgCacheHome := filepath.Join(homeDir, "xdg-cache")
 	t.Setenv("HOME", homeDir)
-	t.Setenv("XDG_DATA_HOME", xdgDataHome)
+	t.Setenv("XDG_CACHE_HOME", xdgCacheHome)
 
 	cfg, err := LoadBytes("test.txtpb", []byte(`notes_root: "/notes"`))
 	if err != nil {
 		t.Fatalf("load config: %v", err)
 	}
 
-	if got, want := cfg.IndexDirectory, filepath.Join(xdgDataHome, "recall-org-roam", defaultIndexDirectoryName); got != want {
+	if got, want := cfg.IndexDirectory, filepath.Join(xdgCacheHome, "recall-org-roam", defaultIndexDirectoryName); got != want {
 		t.Fatalf("index_directory = %q, want %q", got, want)
 	}
 }
 
-func TestLoadBytesFallsBackToLocalShareDefaultIndexDirectory(t *testing.T) {
+func TestLoadBytesFallsBackToDotCacheDefaultIndexDirectory(t *testing.T) {
 	t.Helper()
 
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
-	t.Setenv("XDG_DATA_HOME", "")
+	t.Setenv("XDG_CACHE_HOME", "")
 
 	cfg, err := LoadBytes("test.txtpb", []byte(`notes_root: "/notes"`))
 	if err != nil {
 		t.Fatalf("load config: %v", err)
 	}
 
-	if got, want := cfg.IndexDirectory, filepath.Join(homeDir, ".local", "share", "recall-org-roam", defaultIndexDirectoryName); got != want {
+	if got, want := cfg.IndexDirectory, filepath.Join(homeDir, ".cache", "recall-org-roam", defaultIndexDirectoryName); got != want {
 		t.Fatalf("index_directory = %q, want %q", got, want)
 	}
 }
@@ -70,7 +70,7 @@ func TestLoadBytesNormalizesHomeRelativePaths(t *testing.T) {
 
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
-	t.Setenv("XDG_DATA_HOME", filepath.Join(homeDir, "xdg-data"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(homeDir, "xdg-cache"))
 
 	cfg, err := LoadBytes("test.txtpb", []byte(`
 notes_root: "  ~/notes  "
@@ -131,16 +131,16 @@ func TestLoadBytesRejectsExcludedDirectoryNamePaths(t *testing.T) {
 	}
 }
 
-func TestLoadBytesRejectsRelativeXDGDataHomeForDefaultIndexDirectory(t *testing.T) {
+func TestLoadBytesRejectsRelativeXDGCacheHomeForDefaultIndexDirectory(t *testing.T) {
 	t.Helper()
 
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
-	t.Setenv("XDG_DATA_HOME", "relative/data")
+	t.Setenv("XDG_CACHE_HOME", "relative/cache")
 
 	_, err := LoadBytes("test.txtpb", []byte(`notes_root: "/notes"`))
-	if err == nil || !strings.Contains(err.Error(), "XDG_DATA_HOME") {
-		t.Fatalf("expected relative XDG_DATA_HOME error, got %v", err)
+	if err == nil || !strings.Contains(err.Error(), "XDG_CACHE_HOME") {
+		t.Fatalf("expected relative XDG_CACHE_HOME error, got %v", err)
 	}
 }
 

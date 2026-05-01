@@ -24,7 +24,7 @@ alphabody
 
 	t.Setenv("HOME", homeDir)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(homeDir, "xdg-config"))
-	t.Setenv("XDG_DATA_HOME", filepath.Join(homeDir, "xdg-data"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(homeDir, "xdg-cache"))
 
 	configPath := filepath.Join(homeDir, "xdg-config", "recall-org-roam", "config.txtpb")
 	writeConfigFile(t, configPath, "notes_root: \""+notesRoot+"\"")

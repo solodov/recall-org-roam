@@ -174,11 +174,11 @@ func defaultConfigPath() (string, error) {
 }
 
 func defaultIndexDirectory() (string, error) {
-	dataHome := strings.TrimSpace(os.Getenv("XDG_DATA_HOME"))
-	if dataHome != "" {
-		normalized, err := normalizeAbsolutePath(dataHome)
+	cacheHome := strings.TrimSpace(os.Getenv("XDG_CACHE_HOME"))
+	if cacheHome != "" {
+		normalized, err := normalizeAbsolutePath(cacheHome)
 		if err != nil {
-			return "", fmt.Errorf("XDG_DATA_HOME: %w", err)
+			return "", fmt.Errorf("XDG_CACHE_HOME: %w", err)
 		}
 		return filepath.Join(normalized, "recall-org-roam", defaultIndexDirectoryName), nil
 	}
@@ -187,5 +187,5 @@ func defaultIndexDirectory() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("resolve home directory: %w", err)
 	}
-	return filepath.Join(home, ".local", "share", "recall-org-roam", defaultIndexDirectoryName), nil
+	return filepath.Join(home, ".cache", "recall-org-roam", defaultIndexDirectoryName), nil
 }
