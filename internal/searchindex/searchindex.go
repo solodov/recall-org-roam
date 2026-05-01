@@ -17,8 +17,8 @@ import (
 
 const pageSize = 1000
 
-// SearchHit stores the search fields the application layer needs for rendering.
-type SearchHit struct {
+// SearchResult stores the search fields the application layer needs for rendering.
+type SearchResult struct {
 	ID          string
 	Path        string
 	ParentID    string
@@ -95,11 +95,11 @@ func UpdateFile(indexDirectory string, path string, documents []projection.Entry
 
 // Search runs one recall-org-roam query dialect search after removing stale file-backed documents.
 // Archived entries stay hidden unless the query explicitly asks for them.
-func Search(indexDirectory string, rawQuery string) ([]SearchHit, error) {
+func Search(indexDirectory string, rawQuery string) ([]SearchResult, error) {
 	return searchAt(indexDirectory, rawQuery, time.Now())
 }
 
-func searchAt(indexDirectory string, rawQuery string, now time.Time) ([]SearchHit, error) {
+func searchAt(indexDirectory string, rawQuery string, now time.Time) ([]SearchResult, error) {
 	index, err := openExistingIndex(indexDirectory)
 	if err != nil {
 		return nil, err
@@ -116,7 +116,7 @@ func searchAt(indexDirectory string, rawQuery string, now time.Time) ([]SearchHi
 	if err != nil {
 		return nil, err
 	}
-	hits, err := collectSearchHits(index, compiledQuery)
+	hits, err := collectSearchResults(index, compiledQuery)
 	if err != nil {
 		return nil, fmt.Errorf("search index %q: %w", indexDirectory, err)
 	}
@@ -358,8 +358,8 @@ func collectDocumentIDs(index bleve.Index, query query.Query) ([]string, error) 
 	}
 }
 
-func collectSearchHits(index bleve.Index, query query.Query) ([]SearchHit, error) {
-	hits := make([]SearchHit, 0)
+func collectSearchResults(index bleve.Index, query query.Query) ([]SearchResult, error) {
+	hits := make([]SearchResult, 0)
 	for from := 0; ; from += pageSize {
 		request := bleve.NewSearchRequestOptions(query, pageSize, from, false)
 		request.Fields = []string{"headline", "path", "parent_id", "ancestor_id", "outline"}
@@ -372,7 +372,7 @@ func collectSearchHits(index bleve.Index, query query.Query) ([]SearchHit, error
 			path, _ := hit.Fields["path"].(string)
 			parentID, _ := hit.Fields["parent_id"].(string)
 			outline, _ := hit.Fields["outline"].(string)
-			hits = append(hits, SearchHit{ID: hit.ID, Path: path, ParentID: parentID, AncestorIDs: storedStringSlice(hit.Fields["ancestor_id"]), Outline: outline, Headline: headline})
+			hits = append(hits, SearchResult{ID: hit.ID, Path: path, ParentID: parentID, AncestorIDs: storedStringSlice(hit.Fields["ancestor_id"]), Outline: outline, Headline: headline})
 		}
 		if len(result.Hits) < pageSize {
 			return hits, nil

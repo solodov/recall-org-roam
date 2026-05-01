@@ -64,6 +64,8 @@ github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZN
 github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=
 github.com/solodov/recall v0.0.0-20260430164956-609880591632 h1:uSyDFD0Qbs1geS4xd+I42nOavRjPMYnOEBdfUBsgXbA=
 github.com/solodov/recall v0.0.0-20260430164956-609880591632/go.mod h1:Q6plATdpNFAFBI1sB8G6ov2ylh+hy/O3qO8HZ/UALew=
+github.com/solodov/recall v0.0.0-20260501193531-a3718b44493d h1:+uZ9DDnU9v18Un8LA357Mv2Qnd8DjBPDdHCv5D4qRWk=
+github.com/solodov/recall v0.0.0-20260501193531-a3718b44493d/go.mod h1:swTONx2Up2/ItiETuNJAumAav1aAg6GGZsPhkn6+CF4=
 github.com/spf13/cobra v1.10.2 h1:DMTTonx5m65Ic0GOoRY2c16WCbHxOOw6xxezuLaBpcU=
 github.com/spf13/cobra v1.10.2/go.mod h1:7C1pvHqHw5A4vrJfjNwvOdzYu0Gml16OCs2GRiTUUS4=
 github.com/spf13/pflag v1.0.9 h1:9exaQaMOCwffKiiiYk6/BndUBv+iRViNW+4lEMi0PvY=

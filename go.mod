@@ -5,7 +5,7 @@ go 1.26
 require (
 	github.com/blevesearch/bleve/v2 v2.5.7
 	github.com/niklasfasching/go-org v1.9.1
-	github.com/solodov/recall v0.0.0-20260430164956-609880591632
+	github.com/solodov/recall v0.0.0-20260501193531-a3718b44493d
 	github.com/spf13/cobra v1.10.2
 	google.golang.org/protobuf v1.36.11
 )

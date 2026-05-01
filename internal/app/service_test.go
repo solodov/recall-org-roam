@@ -55,10 +55,10 @@ alphabody
 	if !ok {
 		t.Fatalf("searchResult type = %T, want SearchResponse", searchResult)
 	}
-	if len(searchResponse.Hits) != 1 || searchResponse.Hits[0].ID != "alpha-id" {
-		t.Fatalf("search hits = %+v, want alpha-id", searchResponse.Hits)
+	if len(searchResponse.Results) != 1 || searchResponse.Results[0].ID != "alpha-id" {
+		t.Fatalf("search hits = %+v, want alpha-id", searchResponse.Results)
 	}
-	if got, want := searchResponse.Hits[0].Path, "alpha.org"; got != want {
+	if got, want := searchResponse.Results[0].Path, "alpha.org"; got != want {
 		t.Fatalf("search hit path = %q, want %q", got, want)
 	}
 }
@@ -94,8 +94,8 @@ needle
 		t.Fatalf("search file root ID: %v", err)
 	}
 	searchResponse := searchResult.(SearchResponse)
-	if len(searchResponse.Hits) != 1 || searchResponse.Hits[0].ID != "file-id" {
-		t.Fatalf("file root hits = %+v, want file-id", searchResponse.Hits)
+	if len(searchResponse.Results) != 1 || searchResponse.Results[0].ID != "file-id" {
+		t.Fatalf("file root hits = %+v, want file-id", searchResponse.Results)
 	}
 
 	searchResult, err = service.Search(context.Background(), SearchRequest{ConfigPath: configPath, Query: "ancestor_id:file-id"})
@@ -103,10 +103,10 @@ needle
 		t.Fatalf("search file root ancestor_id: %v", err)
 	}
 	searchResponse = searchResult.(SearchResponse)
-	if len(searchResponse.Hits) != 1 || searchResponse.Hits[0].ID != "child-id" {
-		t.Fatalf("ancestor hits = %+v, want child-id", searchResponse.Hits)
+	if len(searchResponse.Results) != 1 || searchResponse.Results[0].ID != "child-id" {
+		t.Fatalf("ancestor hits = %+v, want child-id", searchResponse.Results)
 	}
-	if got, want := searchResponse.Hits[0].ParentID, "file-id"; got != want {
+	if got, want := searchResponse.Results[0].ParentID, "file-id"; got != want {
 		t.Fatalf("parentID = %q, want %q", got, want)
 	}
 }
@@ -146,16 +146,16 @@ needle
 		t.Fatalf("search index: %v", err)
 	}
 	searchResponse := searchResult.(SearchResponse)
-	if len(searchResponse.Hits) != 1 || searchResponse.Hits[0].ID != "child-id" {
-		t.Fatalf("search hits = %+v, want child-id", searchResponse.Hits)
+	if len(searchResponse.Results) != 1 || searchResponse.Results[0].ID != "child-id" {
+		t.Fatalf("search hits = %+v, want child-id", searchResponse.Results)
 	}
-	if searchResponse.Hits[0].ParentID != "" {
-		t.Fatalf("parentID = %q, want empty for non-indexed immediate parent", searchResponse.Hits[0].ParentID)
+	if searchResponse.Results[0].ParentID != "" {
+		t.Fatalf("parentID = %q, want empty for non-indexed immediate parent", searchResponse.Results[0].ParentID)
 	}
-	if got, want := strings.Join(searchResponse.Hits[0].AncestorIDs, ","), "root-id"; got != want {
+	if got, want := strings.Join(searchResponse.Results[0].AncestorIDs, ","), "root-id"; got != want {
 		t.Fatalf("ancestorIDs = %q, want %q", got, want)
 	}
-	if got, want := searchResponse.Hits[0].Outline, "Root / Parent without ID / Child"; got != want {
+	if got, want := searchResponse.Results[0].Outline, "Root / Parent without ID / Child"; got != want {
 		t.Fatalf("outline = %q, want %q", got, want)
 	}
 }
@@ -219,10 +219,10 @@ newbody
 		t.Fatalf("search new content: %v", err)
 	}
 	searchResponse := searchResult.(SearchResponse)
-	if len(searchResponse.Hits) != 1 || searchResponse.Hits[0].ID != "new-id" {
-		t.Fatalf("new hits = %+v, want new-id", searchResponse.Hits)
+	if len(searchResponse.Results) != 1 || searchResponse.Results[0].ID != "new-id" {
+		t.Fatalf("new hits = %+v, want new-id", searchResponse.Results)
 	}
-	if got, want := searchResponse.Hits[0].Path, "entry.org"; got != want {
+	if got, want := searchResponse.Results[0].Path, "entry.org"; got != want {
 		t.Fatalf("new hit path = %q, want %q", got, want)
 	}
 
@@ -230,7 +230,7 @@ newbody
 	if err != nil {
 		t.Fatalf("search old content: %v", err)
 	}
-	if hits := searchResult.(SearchResponse).Hits; len(hits) != 0 {
+	if hits := searchResult.(SearchResponse).Results; len(hits) != 0 {
 		t.Fatalf("old hits = %+v, want none", hits)
 	}
 
@@ -256,7 +256,7 @@ newbody
 	if err != nil {
 		t.Fatalf("search after deletion: %v", err)
 	}
-	if hits := searchResult.(SearchResponse).Hits; len(hits) != 0 {
+	if hits := searchResult.(SearchResponse).Results; len(hits) != 0 {
 		t.Fatalf("hits after deletion = %+v, want none", hits)
 	}
 }
@@ -312,7 +312,7 @@ outsidebody
 	if err != nil {
 		t.Fatalf("search skipped file content: %v", err)
 	}
-	if hits := searchResult.(SearchResponse).Hits; len(hits) != 0 {
+	if hits := searchResult.(SearchResponse).Results; len(hits) != 0 {
 		t.Fatalf("hits = %+v, want skipped outside file to stay unindexed", hits)
 	}
 }
@@ -346,7 +346,7 @@ body
 	if err != nil {
 		t.Fatalf("search original expanded tag: %v", err)
 	}
-	if hits := searchResult.(SearchResponse).Hits; len(hits) != 1 || hits[0].ID != "entry-id" {
+	if hits := searchResult.(SearchResponse).Results; len(hits) != 1 || hits[0].ID != "entry-id" {
 		t.Fatalf("original tag hits = %+v, want entry-id", hits)
 	}
 
@@ -364,7 +364,7 @@ body
 	if err != nil {
 		t.Fatalf("search rebuilt expanded tag: %v", err)
 	}
-	if hits := searchResult.(SearchResponse).Hits; len(hits) != 1 || hits[0].ID != "entry-id" {
+	if hits := searchResult.(SearchResponse).Results; len(hits) != 1 || hits[0].ID != "entry-id" {
 		t.Fatalf("rebuilt tag hits = %+v, want entry-id", hits)
 	}
 
@@ -372,7 +372,7 @@ body
 	if err != nil {
 		t.Fatalf("search removed expanded tag: %v", err)
 	}
-	if hits := searchResult.(SearchResponse).Hits; len(hits) != 0 {
+	if hits := searchResult.(SearchResponse).Results; len(hits) != 0 {
 		t.Fatalf("removed tag hits = %+v, want none", hits)
 	}
 }
@@ -410,7 +410,7 @@ excludedbody
 	if err != nil {
 		t.Fatalf("search included content: %v", err)
 	}
-	if hits := searchResult.(SearchResponse).Hits; len(hits) != 1 || hits[0].ID != "included-id" {
+	if hits := searchResult.(SearchResponse).Results; len(hits) != 1 || hits[0].ID != "included-id" {
 		t.Fatalf("included hits = %+v, want included-id", hits)
 	}
 
@@ -418,7 +418,7 @@ excludedbody
 	if err != nil {
 		t.Fatalf("search excluded content: %v", err)
 	}
-	if hits := searchResult.(SearchResponse).Hits; len(hits) != 0 {
+	if hits := searchResult.(SearchResponse).Results; len(hits) != 0 {
 		t.Fatalf("excluded hits = %+v, want none", hits)
 	}
 
@@ -444,7 +444,7 @@ updated-excludedbody
 	if err != nil {
 		t.Fatalf("search updated excluded content: %v", err)
 	}
-	if hits := searchResult.(SearchResponse).Hits; len(hits) != 0 {
+	if hits := searchResult.(SearchResponse).Results; len(hits) != 0 {
 		t.Fatalf("updated excluded hits = %+v, want none", hits)
 	}
 }
@@ -521,10 +521,10 @@ initial-photo-body
 		t.Fatalf("search initial content: %v", err)
 	}
 	searchResponse := searchResult.(SearchResponse)
-	if len(searchResponse.Hits) != 1 || searchResponse.Hits[0].ID != "photo-id" {
-		t.Fatalf("search hits = %+v, want photo-id", searchResponse.Hits)
+	if len(searchResponse.Results) != 1 || searchResponse.Results[0].ID != "photo-id" {
+		t.Fatalf("search hits = %+v, want photo-id", searchResponse.Results)
 	}
-	if got, want := searchResponse.Hits[0].Path, "mobile/photo.org"; got != want {
+	if got, want := searchResponse.Results[0].Path, "mobile/photo.org"; got != want {
 		t.Fatalf("search hit path = %q, want %q", got, want)
 	}
 
@@ -543,10 +543,10 @@ updated-photo-body
 		t.Fatalf("search updated content: %v", err)
 	}
 	searchResponse = searchResult.(SearchResponse)
-	if len(searchResponse.Hits) != 1 || searchResponse.Hits[0].ID != "photo-id" {
-		t.Fatalf("updated search hits = %+v, want photo-id", searchResponse.Hits)
+	if len(searchResponse.Results) != 1 || searchResponse.Results[0].ID != "photo-id" {
+		t.Fatalf("updated search hits = %+v, want photo-id", searchResponse.Results)
 	}
-	if got, want := searchResponse.Hits[0].Path, "mobile/photo.org"; got != want {
+	if got, want := searchResponse.Results[0].Path, "mobile/photo.org"; got != want {
 		t.Fatalf("updated search hit path = %q, want %q", got, want)
 	}
 }

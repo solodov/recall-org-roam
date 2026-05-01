@@ -268,25 +268,25 @@ func TestSearchSupportsPlanningAwareDialectFilters(t *testing.T) {
 	if err != nil {
 		t.Fatalf("search overdue: %v", err)
 	}
-	assertHitIDs(t, hits, []string{"overdue-scheduled-yesterday", "overdue-last-week", "overdue-deadline-earlier-today"})
+	assertResultIDs(t, hits, []string{"overdue-scheduled-yesterday", "overdue-last-week", "overdue-deadline-earlier-today"})
 
 	hits, err = searchAt(indexDir, "due:today", now)
 	if err != nil {
 		t.Fatalf("search due today: %v", err)
 	}
-	assertHitIDs(t, hits, []string{"overdue-scheduled-yesterday", "overdue-last-week", "overdue-deadline-earlier-today", "due-today-later"})
+	assertResultIDs(t, hits, []string{"overdue-scheduled-yesterday", "overdue-last-week", "overdue-deadline-earlier-today", "due-today-later"})
 
 	hits, err = searchAt(indexDir, "due:this-week", now)
 	if err != nil {
 		t.Fatalf("search due this week: %v", err)
 	}
-	assertHitIDs(t, hits, []string{"overdue-scheduled-yesterday", "overdue-last-week", "overdue-deadline-earlier-today", "due-today-later", "due-this-week"})
+	assertResultIDs(t, hits, []string{"overdue-scheduled-yesterday", "overdue-last-week", "overdue-deadline-earlier-today", "due-today-later", "due-this-week"})
 
 	hits, err = searchAt(indexDir, "delta due:today", now)
 	if err != nil {
 		t.Fatalf("search mixed raw bleve and due today: %v", err)
 	}
-	assertHitIDs(t, hits, []string{"due-today-later"})
+	assertResultIDs(t, hits, []string{"due-today-later"})
 }
 
 func TestSearchExcludesArchivedEntriesByDefaultUnlessRequested(t *testing.T) {
@@ -306,25 +306,25 @@ func TestSearchExcludesArchivedEntriesByDefaultUnlessRequested(t *testing.T) {
 	if err != nil {
 		t.Fatalf("search default visibility: %v", err)
 	}
-	assertHitIDs(t, hits, []string{"visible-id"})
+	assertResultIDs(t, hits, []string{"visible-id"})
 
 	hits, err = Search(indexDir, "is:archived")
 	if err != nil {
 		t.Fatalf("search archived dialect filter: %v", err)
 	}
-	assertHitIDs(t, hits, []string{"archived-id"})
+	assertResultIDs(t, hits, []string{"archived-id"})
 
 	hits, err = Search(indexDir, "archived-only is:archived")
 	if err != nil {
 		t.Fatalf("search archived mixed query: %v", err)
 	}
-	assertHitIDs(t, hits, []string{"archived-id"})
+	assertResultIDs(t, hits, []string{"archived-id"})
 
 	hits, err = Search(indexDir, "+is_archived:true +archived-only")
 	if err != nil {
 		t.Fatalf("search archived raw field query: %v", err)
 	}
-	assertHitIDs(t, hits, []string{"archived-id"})
+	assertResultIDs(t, hits, []string{"archived-id"})
 }
 
 func TestSearchPassesThroughBleveQueryStringSemantics(t *testing.T) {
@@ -517,7 +517,7 @@ func writeIndexFile(t *testing.T, path string) string {
 	return path
 }
 
-func assertHitIDs(t *testing.T, hits []SearchHit, want []string) {
+func assertResultIDs(t *testing.T, hits []SearchResult, want []string) {
 	t.Helper()
 
 	got := make([]string, 0, len(hits))

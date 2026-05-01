@@ -36,14 +36,14 @@ The provider advertises one provider-local search surface:
 
 - `entry:content` — Org entry headlines, outlines, tags, and body text.
 
-Every returned hit sets `selector: "entry:content"`. The configured Recall provider id is not included in provider-local selectors.
+Every returned result sets `selector: "entry:content"`. The configured Recall provider id is not included in provider-local selectors.
 
-Org hits map into Recall data as:
+Org results map into Recall data as:
 
-- `id`: Org entry ID.
+- `id`: Org entry ID as provider-local machine identity.
 - `selector`: `entry:content`.
-- `title`: cleaned Org headline.
-- `snippet`: omitted until the index exposes useful match context.
+- `fields`: cleaned `title`, relative `path`, optional `outline`, `parent_id`, and `ancestor_ids`.
+- `format`: `title` for the primary line, with `path` and `outline` as detail hints.
 - `targets`: first target is the `org-protocol://roam-node?...` URI; include a typed file target when available.
 - `group`: file-based grouping keyed by canonical path with a typed file target.
 - `score`: omitted unless the search layer exposes Bleve scores cleanly.

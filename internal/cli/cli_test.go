@@ -187,7 +187,7 @@ func TestRunRejectsDirectSearchCommand(t *testing.T) {
 func TestRunServesRecallProviderWithTextprotoIO(t *testing.T) {
 	t.Helper()
 
-	service := &fakeService{searchResponse: app.SearchResponse{Hits: []app.SearchHit{{ID: "alpha-id", Path: "projects/model.org", FilePath: "/notes/projects/model.org", Headline: "Find [[https://example.invalid][Alpha]]"}}}}
+	service := &fakeService{searchResponse: app.SearchResponse{Results: []app.SearchResult{{ID: "alpha-id", Path: "projects/model.org", FilePath: "/notes/projects/model.org", Headline: "Find [[https://example.invalid][Alpha]]"}}}}
 	requestBytes := mustMarshalTextproto(t, &searchv1.SearchRequest{Query: "alpha", Limit: proto.Uint32(1), SelectorHints: []string{"entry"}})
 	var stdout strings.Builder
 	var stderr strings.Builder
@@ -209,39 +209,53 @@ func TestRunServesRecallProviderWithTextprotoIO(t *testing.T) {
 		t.Fatalf("limit = %d, want %d", got, want)
 	}
 
+	textprotoOutput := stdout.String()
+	if !strings.Contains(textprotoOutput, "results:") || !strings.Contains(textprotoOutput, "fields:") || !strings.Contains(textprotoOutput, "format:") {
+		t.Fatalf("stdout = %q, want structured results with fields and format", textprotoOutput)
+	}
+
 	var response searchv1.SearchResponse
-	if err := prototext.Unmarshal([]byte(stdout.String()), &response); err != nil {
-		t.Fatalf("decode response: %v; stdout = %q", err, stdout.String())
+	if err := prototext.Unmarshal([]byte(textprotoOutput), &response); err != nil {
+		t.Fatalf("decode response: %v; stdout = %q", err, textprotoOutput)
 	}
-	if len(response.Hits) != 1 {
-		t.Fatalf("hits = %+v, want one hit", response.Hits)
+	if len(response.GetResults()) != 1 {
+		t.Fatalf("results = %+v, want one result", response.GetResults())
 	}
-	hit := response.Hits[0]
-	if got, want := hit.GetId(), "alpha-id"; got != want {
+	result := response.GetResults()[0]
+	if got, want := result.GetId(), "alpha-id"; got != want {
 		t.Fatalf("id = %q, want %q", got, want)
 	}
-	if got, want := hit.GetSelector(), "entry:content"; got != want {
+	if got, want := result.GetSelector(), "entry:content"; got != want {
 		t.Fatalf("selector = %q, want %q", got, want)
 	}
-	if got, want := hit.GetTitle(), "Find Alpha"; got != want {
-		t.Fatalf("title = %q, want %q", got, want)
+	if got, want := resultTextField(t, result, "title"), "Find Alpha"; got != want {
+		t.Fatalf("title field = %q, want %q", got, want)
 	}
-	if len(hit.GetTargets()) != 2 {
-		t.Fatalf("targets = %+v, want org-roam URI and file", hit.GetTargets())
+	if got, want := resultTextField(t, result, "path"), "projects/model.org"; got != want {
+		t.Fatalf("path field = %q, want %q", got, want)
 	}
-	if got, want := hit.GetTargets()[0].GetUri().GetUri(), "org-protocol://roam-node?node=alpha-id"; got != want {
+	if got, want := strings.Join(result.GetFormat().GetTitleFields(), ","), "title"; got != want {
+		t.Fatalf("title fields = %q, want %q", got, want)
+	}
+	if got, want := strings.Join(result.GetFormat().GetDetailFields(), ","), "path,outline"; got != want {
+		t.Fatalf("detail fields = %q, want %q", got, want)
+	}
+	if len(result.GetTargets()) != 2 {
+		t.Fatalf("targets = %+v, want org-roam URI and file", result.GetTargets())
+	}
+	if got, want := result.GetTargets()[0].GetUri().GetUri(), "org-protocol://roam-node?node=alpha-id"; got != want {
 		t.Fatalf("primary target uri = %q, want %q", got, want)
 	}
-	if got, want := hit.GetTargets()[1].GetFile().GetPath(), "/notes/projects/model.org"; got != want {
+	if got, want := result.GetTargets()[1].GetFile().GetPath(), "/notes/projects/model.org"; got != want {
 		t.Fatalf("file target path = %q, want %q", got, want)
 	}
-	if got, want := hit.GetGroup().GetKey(), "file:/notes/projects/model.org"; got != want {
+	if got, want := result.GetGroup().GetKey(), "file:/notes/projects/model.org"; got != want {
 		t.Fatalf("group key = %q, want %q", got, want)
 	}
-	if got, want := hit.GetGroup().GetTitle(), "projects/model.org"; got != want {
+	if got, want := result.GetGroup().GetTitle(), "projects/model.org"; got != want {
 		t.Fatalf("group title = %q, want %q", got, want)
 	}
-	if got, want := hit.GetGroup().GetTargets()[0].GetFile().GetPath(), "/notes/projects/model.org"; got != want {
+	if got, want := result.GetGroup().GetTargets()[0].GetFile().GetPath(), "/notes/projects/model.org"; got != want {
 		t.Fatalf("group file target path = %q, want %q", got, want)
 	}
 }
@@ -287,7 +301,7 @@ func TestRunServesRecallProviderCapabilitiesWithTextprotoIO(t *testing.T) {
 func TestRunRecallProviderSkipsUnrequestedSelectors(t *testing.T) {
 	t.Helper()
 
-	service := &fakeService{searchResponse: app.SearchResponse{Hits: []app.SearchHit{{ID: "alpha-id", Headline: "Alpha"}}}}
+	service := &fakeService{searchResponse: app.SearchResponse{Results: []app.SearchResult{{ID: "alpha-id", Headline: "Alpha"}}}}
 	requestBytes := mustMarshalTextproto(t, &searchv1.SearchRequest{Query: "alpha", SelectorHints: []string{"file"}})
 	var stdout strings.Builder
 	var stderr strings.Builder
@@ -304,15 +318,15 @@ func TestRunRecallProviderSkipsUnrequestedSelectors(t *testing.T) {
 	if err := prototext.Unmarshal([]byte(stdout.String()), &response); err != nil {
 		t.Fatalf("decode response: %v; stdout = %q", err, stdout.String())
 	}
-	if len(response.Hits) != 0 {
-		t.Fatalf("hits = %+v, want no hits for unrequested selector", response.Hits)
+	if len(response.GetResults()) != 0 {
+		t.Fatalf("results = %+v, want no results for unrequested selector", response.GetResults())
 	}
 }
 
 func TestRunServesRecallProviderWithBinaryIO(t *testing.T) {
 	t.Helper()
 
-	service := &fakeService{searchResponse: app.SearchResponse{Hits: []app.SearchHit{{ID: "alpha-id", Headline: "Alpha"}}}}
+	service := &fakeService{searchResponse: app.SearchResponse{Results: []app.SearchResult{{ID: "alpha-id", Headline: "Alpha"}}}}
 	requestBytes, err := proto.Marshal(&searchv1.SearchRequest{Query: "alpha"})
 	if err != nil {
 		t.Fatalf("marshal request: %v", err)
@@ -331,11 +345,14 @@ func TestRunServesRecallProviderWithBinaryIO(t *testing.T) {
 	if err := proto.Unmarshal([]byte(stdout.String()), &response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if len(response.Hits) != 1 || response.Hits[0].GetId() != "alpha-id" {
-		t.Fatalf("hits = %+v, want alpha-id", response.Hits)
+	if len(response.GetResults()) != 1 || response.GetResults()[0].GetId() != "alpha-id" {
+		t.Fatalf("results = %+v, want alpha-id", response.GetResults())
 	}
-	if got, want := response.Hits[0].GetSelector(), "entry:content"; got != want {
+	if got, want := response.GetResults()[0].GetSelector(), "entry:content"; got != want {
 		t.Fatalf("selector = %q, want %q", got, want)
+	}
+	if got, want := resultTextField(t, response.GetResults()[0], "title"), "Alpha"; got != want {
+		t.Fatalf("title field = %q, want %q", got, want)
 	}
 }
 
@@ -458,6 +475,17 @@ func TestRunRendersErrorsAsJSONWithFlag(t *testing.T) {
 	if got, want := stderr.String(), "{\"error\":\"boom\"}\n"; got != want {
 		t.Fatalf("stderr = %q, want %q", got, want)
 	}
+}
+
+func resultTextField(t *testing.T, result *searchv1.SearchResponse_Result, key string) string {
+	t.Helper()
+	for _, field := range result.GetFields() {
+		if field.GetKey() == key {
+			return field.GetText()
+		}
+	}
+	t.Fatalf("result fields = %+v, want text field %q", result.GetFields(), key)
+	return ""
 }
 
 func mustMarshalTextproto(t *testing.T, message proto.Message) []byte {

@@ -90,16 +90,16 @@ type SearchRequest struct {
 
 // SearchResponse stores the JSON result for one Bleve query-string search.
 type SearchResponse struct {
-	Hits []SearchHit `json:"hits"`
+	Results []SearchResult `json:"results"`
 }
 
-// SearchHit stores the CLI search hit. Path metadata stays out of JSON and is used only for human rendering.
-type SearchHit struct {
+// SearchResult stores one provider-local Org search result before recall protobuf mapping.
+type SearchResult struct {
 	ID          string   `json:"id"`
 	ParentID    string   `json:"parent_id,omitempty"`
-	AncestorIDs []string `json:"ancestor_id,omitempty"`
+	AncestorIDs []string `json:"ancestor_ids,omitempty"`
 	Outline     string   `json:"outline,omitempty"`
-	Path        string   `json:"-"`
+	Path        string   `json:"path,omitempty"`
 	FilePath    string   `json:"-"`
 	Headline    string   `json:"headline"`
 }
@@ -166,7 +166,7 @@ func (service) Search(_ context.Context, request SearchRequest) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return SearchResponse{Hits: limitSearchHits(searchHitsFromIndex(cfg.NotesRoot, hits), request.Limit)}, nil
+	return SearchResponse{Results: limitSearchResults(searchResultsFromIndex(cfg.NotesRoot, hits), request.Limit)}, nil
 }
 
 // RecallProvider adapts the Org search service to recall's SearchProvider SDK.
@@ -194,7 +194,7 @@ func (provider *RecallProvider) ListCapabilities(context.Context, *searchv1.List
 	}}}, nil
 }
 
-// Search handles one recall search request and maps Org hits into portable recall results.
+// Search handles one recall search request and maps Org index results into portable recall results.
 func (provider *RecallProvider) Search(ctx context.Context, request *searchv1.SearchRequest) (*searchv1.SearchResponse, error) {
 	if request == nil {
 		return nil, fmt.Errorf("search request is nil")
@@ -216,7 +216,7 @@ func (provider *RecallProvider) Search(ctx context.Context, request *searchv1.Se
 	if !ok {
 		return nil, fmt.Errorf("search result type %T, want app.SearchResponse", result)
 	}
-	return &searchv1.SearchResponse{Hits: recallHitsFromSearchHits(response.Hits)}, nil
+	return &searchv1.SearchResponse{Results: recallResultsFromSearchResults(response.Results)}, nil
 }
 
 func loadConfig(path string) (config.Config, error) {
@@ -334,18 +334,18 @@ func isTagHierarchyPath(notesRoot string, path string) (bool, error) {
 	return canonicalPath == tagHierarchyPath, nil
 }
 
-func searchHitsFromIndex(notesRoot string, hits []searchindex.SearchHit) []SearchHit {
+func searchResultsFromIndex(notesRoot string, hits []searchindex.SearchResult) []SearchResult {
 	if len(hits) == 0 {
 		return nil
 	}
-	converted := make([]SearchHit, 0, len(hits))
+	converted := make([]SearchResult, 0, len(hits))
 	for _, hit := range hits {
-		converted = append(converted, SearchHit{ID: hit.ID, ParentID: hit.ParentID, AncestorIDs: hit.AncestorIDs, Outline: hit.Outline, Path: relativeSearchHitPath(notesRoot, hit.Path), FilePath: hit.Path, Headline: hit.Headline})
+		converted = append(converted, SearchResult{ID: hit.ID, ParentID: hit.ParentID, AncestorIDs: hit.AncestorIDs, Outline: hit.Outline, Path: relativeSearchResultPath(notesRoot, hit.Path), FilePath: hit.Path, Headline: hit.Headline})
 	}
 	return converted
 }
 
-func relativeSearchHitPath(notesRoot string, path string) string {
+func relativeSearchResultPath(notesRoot string, path string) string {
 	if path == "" {
 		return ""
 	}
@@ -359,37 +359,66 @@ func relativeSearchHitPath(notesRoot string, path string) string {
 	return filepath.ToSlash(relativePath)
 }
 
-func limitSearchHits(hits []SearchHit, limit int) []SearchHit {
-	if limit <= 0 || len(hits) <= limit {
-		return hits
+func limitSearchResults(results []SearchResult, limit int) []SearchResult {
+	if limit <= 0 || len(results) <= limit {
+		return results
 	}
-	return hits[:limit]
+	return results[:limit]
 }
 
-func recallHitsFromSearchHits(hits []SearchHit) []*searchv1.SearchHit {
-	if len(hits) == 0 {
+func recallResultsFromSearchResults(results []SearchResult) []*searchv1.SearchResponse_Result {
+	if len(results) == 0 {
 		return nil
 	}
-	converted := make([]*searchv1.SearchHit, 0, len(hits))
-	for _, hit := range hits {
-		converted = append(converted, recallHitFromSearchHit(hit))
+	converted := make([]*searchv1.SearchResponse_Result, 0, len(results))
+	for _, result := range results {
+		converted = append(converted, recallResultFromSearchResult(result))
 	}
 	return converted
 }
 
-func recallHitFromSearchHit(hit SearchHit) *searchv1.SearchHit {
-	targets := []*searchv1.OpenTarget{uriTarget(orgRoamNodeURI(hit.ID))}
-	if fileTarget := fileTarget(hit.FilePath); fileTarget != nil {
+func recallResultFromSearchResult(result SearchResult) *searchv1.SearchResponse_Result {
+	targets := []*searchv1.OpenTarget{uriTarget(orgRoamNodeURI(result.ID))}
+	if fileTarget := fileTarget(result.FilePath); fileTarget != nil {
 		targets = append(targets, fileTarget)
 	}
 
-	return &searchv1.SearchHit{
-		Id:       hit.ID,
+	return &searchv1.SearchResponse_Result{
+		Id:       result.ID,
 		Selector: orgEntryContentSelector,
-		Title:    plainRecallHeadline(hit.Headline),
+		Fields:   recallFieldsFromSearchResult(result),
 		Targets:  targets,
-		Group:    recallGroupFromSearchHit(hit),
+		Group:    recallGroupFromSearchResult(result),
+		Format:   resultFormat([]string{"title"}, []string{"path", "outline"}),
 	}
+}
+
+func recallFieldsFromSearchResult(result SearchResult) []*searchv1.SearchResponse_Result_Field {
+	fields := []*searchv1.SearchResponse_Result_Field{textField("title", plainRecallHeadline(result.Headline))}
+	if result.Path != "" {
+		fields = append(fields, textField("path", result.Path))
+	}
+	if result.Outline != "" {
+		fields = append(fields, textField("outline", result.Outline))
+	}
+	if result.ParentID != "" {
+		fields = append(fields, textField("parent_id", result.ParentID))
+	}
+	if len(result.AncestorIDs) > 0 {
+		fields = append(fields, textField("ancestor_ids", strings.Join(result.AncestorIDs, " ")))
+	}
+	return fields
+}
+
+func textField(key string, value string) *searchv1.SearchResponse_Result_Field {
+	return &searchv1.SearchResponse_Result_Field{
+		Key:   key,
+		Value: &searchv1.SearchResponse_Result_Field_Text{Text: value},
+	}
+}
+
+func resultFormat(titleFields []string, detailFields []string) *searchv1.SearchResponse_Result_Format {
+	return &searchv1.SearchResponse_Result_Format{TitleFields: titleFields, DetailFields: detailFields}
 }
 
 func selectorHintsIncludeSurface(hints []string, surface string) bool {
@@ -407,12 +436,12 @@ func selectorHintsIncludeSurface(hints []string, surface string) bool {
 	return !hasHint
 }
 
-func recallGroupFromSearchHit(hit SearchHit) *searchv1.SearchGroup {
-	filePath := strings.TrimSpace(hit.FilePath)
+func recallGroupFromSearchResult(result SearchResult) *searchv1.SearchGroup {
+	filePath := strings.TrimSpace(result.FilePath)
 	if filePath == "" {
 		return nil
 	}
-	groupTitle := strings.TrimSpace(hit.Path)
+	groupTitle := strings.TrimSpace(result.Path)
 	if groupTitle == "" {
 		groupTitle = filepath.Base(filePath)
 	}
