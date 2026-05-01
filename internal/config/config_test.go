@@ -43,7 +43,7 @@ func TestLoadBytesDefaultsIndexDirectoryFromXDGDataHome(t *testing.T) {
 		t.Fatalf("load config: %v", err)
 	}
 
-	if got, want := cfg.IndexDirectory, filepath.Join(xdgDataHome, "org-recall-index", defaultIndexDirectoryName); got != want {
+	if got, want := cfg.IndexDirectory, filepath.Join(xdgDataHome, "recall-org-roam", defaultIndexDirectoryName); got != want {
 		t.Fatalf("index_directory = %q, want %q", got, want)
 	}
 }
@@ -60,7 +60,7 @@ func TestLoadBytesFallsBackToLocalShareDefaultIndexDirectory(t *testing.T) {
 		t.Fatalf("load config: %v", err)
 	}
 
-	if got, want := cfg.IndexDirectory, filepath.Join(homeDir, ".local", "share", "org-recall-index", defaultIndexDirectoryName); got != want {
+	if got, want := cfg.IndexDirectory, filepath.Join(homeDir, ".local", "share", "recall-org-roam", defaultIndexDirectoryName); got != want {
 		t.Fatalf("index_directory = %q, want %q", got, want)
 	}
 }
@@ -157,7 +157,7 @@ func TestResolvePathDefaultsToXDGConfigHome(t *testing.T) {
 		t.Fatalf("resolve config path: %v", err)
 	}
 
-	if got, want := resolvedPath, filepath.Join(xdgConfigHome, "org-recall-index", defaultConfigFileName); got != want {
+	if got, want := resolvedPath, filepath.Join(xdgConfigHome, "recall-org-roam", defaultConfigFileName); got != want {
 		t.Fatalf("configPath = %q, want %q", got, want)
 	}
 }
@@ -174,7 +174,7 @@ func TestResolvePathFallsBackToDotConfig(t *testing.T) {
 		t.Fatalf("resolve config path: %v", err)
 	}
 
-	if got, want := resolvedPath, filepath.Join(homeDir, ".config", "org-recall-index", defaultConfigFileName); got != want {
+	if got, want := resolvedPath, filepath.Join(homeDir, ".config", "recall-org-roam", defaultConfigFileName); got != want {
 		t.Fatalf("configPath = %q, want %q", got, want)
 	}
 }

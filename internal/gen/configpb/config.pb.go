@@ -2,7 +2,7 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        v7.34.1
-// source: orgrecallindex/config.proto
+// source: recallorgroam/config.proto
 
 package configpb
 
@@ -21,13 +21,13 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// Config stores org-recall-index's non-secret operator configuration.
+// Config stores recall-org-roam's non-secret operator configuration.
 type Config struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// notes_root is the absolute or home-relative directory scanned for Org files.
 	NotesRoot *string `protobuf:"bytes,1,opt,name=notes_root,json=notesRoot,proto3,oneof" json:"notes_root,omitempty"`
 	// index_directory is the absolute or home-relative directory where
-	// org-recall-index stores its disposable search index cache.
+	// recall-org-roam stores its disposable search index cache.
 	IndexDirectory *string `protobuf:"bytes,2,opt,name=index_directory,json=indexDirectory,proto3,oneof" json:"index_directory,omitempty"`
 	// excluded_directory_names skips any reachable subtree whose visible
 	// directory name matches one of these configured names.
@@ -38,7 +38,7 @@ type Config struct {
 
 func (x *Config) Reset() {
 	*x = Config{}
-	mi := &file_orgrecallindex_config_proto_msgTypes[0]
+	mi := &file_recallorgroam_config_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -50,7 +50,7 @@ func (x *Config) String() string {
 func (*Config) ProtoMessage() {}
 
 func (x *Config) ProtoReflect() protoreflect.Message {
-	mi := &file_orgrecallindex_config_proto_msgTypes[0]
+	mi := &file_recallorgroam_config_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -63,7 +63,7 @@ func (x *Config) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Config.ProtoReflect.Descriptor instead.
 func (*Config) Descriptor() ([]byte, []int) {
-	return file_orgrecallindex_config_proto_rawDescGZIP(), []int{0}
+	return file_recallorgroam_config_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *Config) GetNotesRoot() string {
@@ -87,36 +87,36 @@ func (x *Config) GetExcludedDirectoryNames() []string {
 	return nil
 }
 
-var File_orgrecallindex_config_proto protoreflect.FileDescriptor
+var File_recallorgroam_config_proto protoreflect.FileDescriptor
 
-const file_orgrecallindex_config_proto_rawDesc = "" +
+const file_recallorgroam_config_proto_rawDesc = "" +
 	"\n" +
-	"\x1borgrecallindex/config.proto\x12\x15orgrecallindex.config\"\xb7\x01\n" +
+	"\x1arecallorgroam/config.proto\x12\x14recallorgroam.config\"\xb7\x01\n" +
 	"\x06Config\x12\"\n" +
 	"\n" +
 	"notes_root\x18\x01 \x01(\tH\x00R\tnotesRoot\x88\x01\x01\x12,\n" +
 	"\x0findex_directory\x18\x02 \x01(\tH\x01R\x0eindexDirectory\x88\x01\x01\x128\n" +
 	"\x18excluded_directory_names\x18\x03 \x03(\tR\x16excludedDirectoryNamesB\r\n" +
 	"\v_notes_rootB\x12\n" +
-	"\x10_index_directoryB1Z/org-recall-index/internal/gen/configpb;configpbb\x06proto3"
+	"\x10_index_directoryBCZAgithub.com/solodov/recall-org-roam/internal/gen/configpb;configpbb\x06proto3"
 
 var (
-	file_orgrecallindex_config_proto_rawDescOnce sync.Once
-	file_orgrecallindex_config_proto_rawDescData []byte
+	file_recallorgroam_config_proto_rawDescOnce sync.Once
+	file_recallorgroam_config_proto_rawDescData []byte
 )
 
-func file_orgrecallindex_config_proto_rawDescGZIP() []byte {
-	file_orgrecallindex_config_proto_rawDescOnce.Do(func() {
-		file_orgrecallindex_config_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_orgrecallindex_config_proto_rawDesc), len(file_orgrecallindex_config_proto_rawDesc)))
+func file_recallorgroam_config_proto_rawDescGZIP() []byte {
+	file_recallorgroam_config_proto_rawDescOnce.Do(func() {
+		file_recallorgroam_config_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_recallorgroam_config_proto_rawDesc), len(file_recallorgroam_config_proto_rawDesc)))
 	})
-	return file_orgrecallindex_config_proto_rawDescData
+	return file_recallorgroam_config_proto_rawDescData
 }
 
-var file_orgrecallindex_config_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
-var file_orgrecallindex_config_proto_goTypes = []any{
-	(*Config)(nil), // 0: orgrecallindex.config.Config
+var file_recallorgroam_config_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
+var file_recallorgroam_config_proto_goTypes = []any{
+	(*Config)(nil), // 0: recallorgroam.config.Config
 }
-var file_orgrecallindex_config_proto_depIdxs = []int32{
+var file_recallorgroam_config_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for method output_type
 	0, // [0:0] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name
@@ -124,27 +124,27 @@ var file_orgrecallindex_config_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for field type_name
 }
 
-func init() { file_orgrecallindex_config_proto_init() }
-func file_orgrecallindex_config_proto_init() {
-	if File_orgrecallindex_config_proto != nil {
+func init() { file_recallorgroam_config_proto_init() }
+func file_recallorgroam_config_proto_init() {
+	if File_recallorgroam_config_proto != nil {
 		return
 	}
-	file_orgrecallindex_config_proto_msgTypes[0].OneofWrappers = []any{}
+	file_recallorgroam_config_proto_msgTypes[0].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_orgrecallindex_config_proto_rawDesc), len(file_orgrecallindex_config_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_recallorgroam_config_proto_rawDesc), len(file_recallorgroam_config_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   1,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
-		GoTypes:           file_orgrecallindex_config_proto_goTypes,
-		DependencyIndexes: file_orgrecallindex_config_proto_depIdxs,
-		MessageInfos:      file_orgrecallindex_config_proto_msgTypes,
+		GoTypes:           file_recallorgroam_config_proto_goTypes,
+		DependencyIndexes: file_recallorgroam_config_proto_depIdxs,
+		MessageInfos:      file_recallorgroam_config_proto_msgTypes,
 	}.Build()
-	File_orgrecallindex_config_proto = out.File
-	file_orgrecallindex_config_proto_goTypes = nil
-	file_orgrecallindex_config_proto_depIdxs = nil
+	File_recallorgroam_config_proto = out.File
+	file_recallorgroam_config_proto_goTypes = nil
+	file_recallorgroam_config_proto_depIdxs = nil
 }

@@ -4,8 +4,8 @@ import (
 	"context"
 	"os"
 
-	"org-recall-index/internal/app"
-	"org-recall-index/internal/cli"
+	"github.com/solodov/recall-org-roam/internal/app"
+	"github.com/solodov/recall-org-roam/internal/cli"
 )
 
 // main wires the Cobra command surface to the application service.

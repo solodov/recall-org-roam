@@ -4,13 +4,13 @@ import (
 	"context"
 	"io"
 
-	"org-recall-index/internal/app"
+	"github.com/solodov/recall-org-roam/internal/app"
 
 	recallprovider "github.com/solodov/recall/provider"
 	"github.com/spf13/cobra"
 )
 
-// Run executes the org-recall-index Cobra command tree and renders command results in human-readable or JSON form.
+// Run executes the recall-org-roam Cobra command tree and renders command results in human-readable or JSON form.
 func Run(ctx context.Context, args []string, stdout io.Writer, stderr io.Writer, service app.Service) int {
 	return RunWithIO(ctx, args, nil, stdout, stderr, service)
 }
@@ -37,7 +37,7 @@ func newRootCommand(stdin io.Reader, stdout io.Writer, options *renderOptions, s
 	var configPath string
 
 	command := &cobra.Command{
-		Use:           "org-recall-index",
+		Use:           "recall-org-roam",
 		Short:         "Index Org entries for recall",
 		SilenceErrors: true,
 		SilenceUsage:  true,

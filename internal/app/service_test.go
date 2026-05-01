@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"org-recall-index/internal/discovery"
+	"github.com/solodov/recall-org-roam/internal/discovery"
 )
 
 func TestNewServiceUsesDefaultConfigPathForRebuildAndSearch(t *testing.T) {
@@ -26,7 +26,7 @@ alphabody
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(homeDir, "xdg-config"))
 	t.Setenv("XDG_DATA_HOME", filepath.Join(homeDir, "xdg-data"))
 
-	configPath := filepath.Join(homeDir, "xdg-config", "org-recall-index", "config.txtpb")
+	configPath := filepath.Join(homeDir, "xdg-config", "recall-org-roam", "config.txtpb")
 	writeConfigFile(t, configPath, "notes_root: \""+notesRoot+"\"")
 
 	rebuildResult, err := NewService().Rebuild(context.Background(), RebuildRequest{})

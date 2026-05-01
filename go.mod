@@ -1,4 +1,4 @@
-module org-recall-index
+module github.com/solodov/recall-org-roam
 
 go 1.26
 

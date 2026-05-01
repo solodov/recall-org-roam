@@ -11,8 +11,8 @@ import (
 	"github.com/blevesearch/bleve/v2/mapping"
 	"github.com/blevesearch/bleve/v2/search/query"
 
-	"org-recall-index/internal/projection"
-	"org-recall-index/internal/querydialect"
+	"github.com/solodov/recall-org-roam/internal/projection"
+	"github.com/solodov/recall-org-roam/internal/querydialect"
 )
 
 const pageSize = 1000
@@ -93,7 +93,7 @@ func UpdateFile(indexDirectory string, path string, documents []projection.Entry
 	return UpdateResult{DeletedEntryCount: deletedEntryCount, IndexedEntryCount: len(documents)}, nil
 }
 
-// Search runs one org-recall-index query dialect search after removing stale file-backed documents.
+// Search runs one recall-org-roam query dialect search after removing stale file-backed documents.
 // Archived entries stay hidden unless the query explicitly asks for them.
 func Search(indexDirectory string, rawQuery string) ([]SearchHit, error) {
 	return searchAt(indexDirectory, rawQuery, time.Now())

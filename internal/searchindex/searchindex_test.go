@@ -12,7 +12,7 @@ import (
 
 	"github.com/blevesearch/bleve/v2"
 
-	"org-recall-index/internal/projection"
+	"github.com/solodov/recall-org-roam/internal/projection"
 )
 
 func TestUpdateFileReplacesOnlyTheTargetPathDocuments(t *testing.T) {

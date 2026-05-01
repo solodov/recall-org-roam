@@ -1,6 +1,6 @@
 ---
 id: 20260428-143000-org-index-recall-provider-transition
-title: org-search transition to org-recall-index recall provider
+title: org-search transition to recall-org-roam recall provider
 status: done
 created: 2026-04-28
 updated: 2026-04-30
@@ -9,19 +9,19 @@ externalRef:
 origin: 
 ---
 
-# org-search transition to org-recall-index recall provider
+# org-search transition to recall-org-roam recall provider
 
 ## Outcome
 
-`org-search` became `org-recall-index`, the Org-specific indexer and provider for `recall`.
+`org-search` became `recall-org-roam`, the Org-specific indexer and provider for `recall`.
 
-`org-recall-index` owns Org corpus discovery, Org projection, Bleve index maintenance, save-time file updates, and the Recall `SearchProvider` implementation. Recall owns universal search UX, provider orchestration, result blending, grouping layout, selector filtering, opener selection, and terminal rendering.
+`recall-org-roam` owns Org corpus discovery, Org projection, Bleve index maintenance, save-time file updates, and the Recall `SearchProvider` implementation. Recall owns universal search UX, provider orchestration, result blending, grouping layout, selector filtering, opener selection, and terminal rendering.
 
-The migration intentionally kept no compatibility shims: no `org-search` binary alias, wrapper command, deprecated config path, or transitional Elisp fallback. Internal callers and integration points moved directly to `org-recall-index`.
+The migration intentionally kept no compatibility shims: no `org-search` binary alias, wrapper command, deprecated config path, or transitional Elisp fallback. Internal callers and integration points moved directly to `recall-org-roam`.
 
 ## Current Recall provider contract
 
-`org-recall-index recall-provider` serves the protobuf `recall.search.v1.SearchProvider` service using the Recall SDK and supports both stdio RPC paths:
+`recall-org-roam recall-provider` serves the protobuf `recall.search.v1.SearchProvider` service using the Recall SDK and supports both stdio RPC paths:
 
 - `/recall.search.v1.SearchProvider/Search`
 - `/recall.search.v1.SearchProvider/ListCapabilities`
@@ -51,12 +51,12 @@ Org hits map into Recall data as:
 ## Completed phases
 
 - [x] Add Recall SDK provider integration while the repository was still named `org-search`.
-- [x] Rename the package and binary to `org-recall-index` with no shims.
+- [x] Rename the package and binary to `recall-org-roam` with no shims.
 - [x] Move human search rendering responsibility into Recall.
 - [x] Update the provider to Recall’s selector-based SearchProvider API.
 
 ## End state
 
-- `org-recall-index` indexes Org data and implements Recall’s `SearchProvider` contract.
+- `recall-org-roam` indexes Org data and implements Recall’s `SearchProvider` contract.
 - Recall searches across corpora and renders results.
-- Elisp integration updates the Org index on save and invokes `org-recall-index` directly.
+- Elisp integration updates the Org index on save and invokes `recall-org-roam` directly.

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"org-recall-index/internal/taghierarchy"
+	"github.com/solodov/recall-org-roam/internal/taghierarchy"
 )
 
 func TestProjectFileProjectsOnlyEntriesWithIDAndExcludesDescendantSubtrees(t *testing.T) {

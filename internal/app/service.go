@@ -12,11 +12,11 @@ import (
 	searchv1 "github.com/solodov/recall/proto/recall/search/v1"
 	recallprovider "github.com/solodov/recall/provider"
 
-	"org-recall-index/internal/config"
-	"org-recall-index/internal/discovery"
-	"org-recall-index/internal/projection"
-	"org-recall-index/internal/searchindex"
-	"org-recall-index/internal/taghierarchy"
+	"github.com/solodov/recall-org-roam/internal/config"
+	"github.com/solodov/recall-org-roam/internal/discovery"
+	"github.com/solodov/recall-org-roam/internal/projection"
+	"github.com/solodov/recall-org-roam/internal/searchindex"
+	"github.com/solodov/recall-org-roam/internal/taghierarchy"
 )
 
 // Service exposes the application operations behind the Cobra command surface.

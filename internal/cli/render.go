@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"io"
 
-	"org-recall-index/internal/app"
-	"org-recall-index/internal/projection"
+	"github.com/solodov/recall-org-roam/internal/app"
+	"github.com/solodov/recall-org-roam/internal/projection"
 )
 
 func writeResult(writer io.Writer, value any, jsonOutput bool) error {

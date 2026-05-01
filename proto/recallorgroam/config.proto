@@ -1,15 +1,15 @@
 syntax = "proto3";
 
-package orgrecallindex.config;
+package recallorgroam.config;
 
-option go_package = "org-recall-index/internal/gen/configpb;configpb";
+option go_package = "github.com/solodov/recall-org-roam/internal/gen/configpb;configpb";
 
-// Config stores org-recall-index's non-secret operator configuration.
+// Config stores recall-org-roam's non-secret operator configuration.
 message Config {
   // notes_root is the absolute or home-relative directory scanned for Org files.
   optional string notes_root = 1;
   // index_directory is the absolute or home-relative directory where
-  // org-recall-index stores its disposable search index cache.
+  // recall-org-roam stores its disposable search index cache.
   optional string index_directory = 2;
   // excluded_directory_names skips any reachable subtree whose visible
   // directory name matches one of these configured names.
