@@ -83,3 +83,54 @@ Use the repo `Justfile` for local workflows:
 - `just install` installs the built binary into the Go binary directory.
 
 Additional design notes and completed implementation plans live in `docs/`.
+# recall-org-roam
+
+`recall-org-roam` is a Recall-compatible Org-roam search provider backed by a local Bleve index.
+
+It uses Recall's Go provider SDK for the stdio `SearchProvider` contract, indexes ID-backed Org entries from a configured notes directory, maps matches into structured Recall results, and includes an Emacs package that keeps the index fresh after Org file saves.
+
+## Command groups
+
+- Provider serving: handle Recall stdio search requests.
+- Index maintenance: rebuild the index and sync changed Org files.
+
+## Provider config
+
+The provider config defaults to `$XDG_CONFIG_HOME/recall-org-roam/config.txtpb`, or `~/.config/recall-org-roam/config.txtpb` when `XDG_CONFIG_HOME` is unset. The rebuildable search index defaults to `$XDG_CACHE_HOME/recall-org-roam/index`, or `~/.cache/recall-org-roam/index` when `XDG_CACHE_HOME` is unset.
+
+```textproto
+notes_root: "~/org"
+excluded_directory_names: "data"
+```
+
+## Recall registry example
+
+```textproto
+providers {
+  id: "org-roam"
+  enabled: true
+  weight: 1.0
+  timeout_ms: 1500
+  default_limit: 30
+  transports {
+    stdio {
+      command: "recall-org-roam"
+      args: "recall-provider"
+    }
+  }
+}
+```
+
+## Emacs integration
+
+Load `emacs/recall-org-roam.el` and enable `recall-org-roam-mode` to update the external index after Org saves. The mode is quiet by default and does not add a lighter to the mode line.
+
+## Development
+
+Use the Justfile wrappers:
+
+```bash
+just build
+just test
+just lint
+```
