@@ -93,7 +93,7 @@ Each value is a plist with the key `:silent-success'.")
 When enabled, Org buffers install a buffer-local `after-save-hook' that calls
 `recall-org-roam update-file --json ...' asynchronously."
   :global t
-  :lighter " RecallOrgRoam"
+  :lighter nil
   (if recall-org-roam-mode
       (progn
         (add-hook 'org-mode-hook #'recall-org-roam--enable-current-buffer)
