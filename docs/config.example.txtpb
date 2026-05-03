@@ -1,4 +1,3 @@
 notes_root: "~/org"
-index_directory: "~/.cache/recall-org-roam/index"
 excluded_directory_names: "excluded-one"
 excluded_directory_names: "excluded-two"
