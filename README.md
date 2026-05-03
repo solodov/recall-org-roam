@@ -11,7 +11,17 @@ The boundary is intentional:
 
 The index is built from `.org` files under the configured notes root. Entries are keyed by Org `ID` properties and include searchable headline, outline, tag, scheduling, category, style, and body-text data. A `tags.org` file at the notes root can provide tag-group expansion, and configured directory names can be excluded from discovery.
 
-Search results are returned to Recall as `entry:content` results. Each result includes display fields, a file group, an `org-protocol://roam-node?...` open target for Org-roam, and a file target when the source file is known.
+Search results are returned to Recall as `entry:content` results. Each result displays its cleaned outline under a file group, with an `org-protocol://roam-node?...` open target for Org-roam and a file target when the source file is known.
+
+## Installation
+
+Install the provider binary with Go:
+
+```sh
+go install github.com/solodov/recall-org-roam/cmd/recall-org-roam@latest
+```
+
+Make sure the Go binary directory, usually `$(go env GOPATH)/bin` or `GOBIN`, is on `PATH` so Recall and Emacs can launch `recall-org-roam`.
 
 ## Configuration
 
@@ -27,7 +37,7 @@ excluded_directory_names: "excluded-two"
 
 ## Recall integration
 
-Install the `recall-org-roam` binary somewhere Recall can execute it, then add it as a stdio provider in your Recall config:
+After installing the `recall-org-roam` binary, add it as a stdio provider in your Recall config:
 
 ```protobuf
 providers {
@@ -49,8 +59,15 @@ Recall launches the provider process over stdio and calls the `recall.search.v1.
 
 `emacs/recall-org-roam.el` keeps the external index current while editing Org files. Enable `recall-org-roam-mode` to run asynchronous file updates after Org saves, and use the package commands for manual rebuilds or diagnostics.
 
+With Emacs 29+ `package-vc`, install the package directly from GitHub:
+
 ```elisp
-(add-to-list 'load-path "/path/to/recall-org-roam/emacs")
+(require 'package-vc)
+(unless (package-installed-p 'recall-org-roam)
+  (package-vc-install
+   '(recall-org-roam
+     :url "https://github.com/solodov/recall-org-roam.git"
+     :lisp-dir "emacs")))
 (require 'recall-org-roam)
 (recall-org-roam-mode 1)
 ```

@@ -42,8 +42,8 @@ Org results map into Recall data as:
 
 - `id`: Org entry ID as provider-local machine identity.
 - `selector`: `entry:content`.
-- `fields`: cleaned `title`, relative `path`, optional `outline`, `parent_id`, and `ancestor_ids`.
-- `format`: `title` for the primary line, with `path` and `outline` as detail hints.
+- `fields`: visible cleaned `outline`, plus hidden `parent_id` and `ancestor_ids` when available.
+- `format`: `outline` for the primary line, with no detail fields because the file already appears as the result group.
 - `targets`: first target is the `org-protocol://roam-node?...` URI; include a typed file target when available.
 - `group`: file-based grouping keyed by canonical path with a typed file target.
 - `score`: omitted unless the search layer exposes Bleve scores cleanly.

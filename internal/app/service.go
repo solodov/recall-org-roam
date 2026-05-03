@@ -389,23 +389,17 @@ func recallResultFromSearchResult(result SearchResult) *searchv1.SearchResponse_
 		Fields:   recallFieldsFromSearchResult(result),
 		Targets:  targets,
 		Group:    recallGroupFromSearchResult(result),
-		Format:   resultFormat([]string{"title"}, []string{"path", "outline"}),
+		Format:   resultFormat([]string{"outline"}, nil),
 	}
 }
 
 func recallFieldsFromSearchResult(result SearchResult) []*searchv1.SearchResponse_Result_Field {
-	fields := []*searchv1.SearchResponse_Result_Field{textField("title", plainRecallHeadline(result.Headline))}
-	if result.Path != "" {
-		fields = append(fields, textField("path", result.Path))
-	}
-	if result.Outline != "" {
-		fields = append(fields, textField("outline", result.Outline))
-	}
+	fields := []*searchv1.SearchResponse_Result_Field{textField("outline", recallDisplayOutline(result))}
 	if result.ParentID != "" {
-		fields = append(fields, textField("parent_id", result.ParentID))
+		fields = append(fields, hiddenTextField("parent_id", result.ParentID))
 	}
 	if len(result.AncestorIDs) > 0 {
-		fields = append(fields, textField("ancestor_ids", strings.Join(result.AncestorIDs, " ")))
+		fields = append(fields, hiddenTextField("ancestor_ids", strings.Join(result.AncestorIDs, " ")))
 	}
 	return fields
 }
@@ -415,6 +409,16 @@ func textField(key string, value string) *searchv1.SearchResponse_Result_Field {
 		Key:   key,
 		Value: &searchv1.SearchResponse_Result_Field_Text{Text: value},
 	}
+}
+
+func hiddenTextField(key string, value string) *searchv1.SearchResponse_Result_Field {
+	field := textField(key, value)
+	field.Hidden = boolPointer(true)
+	return field
+}
+
+func boolPointer(value bool) *bool {
+	return &value
 }
 
 func resultFormat(titleFields []string, detailFields []string) *searchv1.SearchResponse_Result_Format {
@@ -456,6 +460,14 @@ var (
 	recallOrgBracketLinkWithDescriptionRegexp    = regexp.MustCompile(`\[\[[^\]]+\]\[([^\]]+)\]\]`)
 	recallOrgBracketLinkWithoutDescriptionRegexp = regexp.MustCompile(`\[\[([^\]]+)\]\]`)
 )
+
+func recallDisplayOutline(result SearchResult) string {
+	outline := strings.TrimSpace(result.Outline)
+	if outline == "" {
+		return plainRecallHeadline(result.Headline)
+	}
+	return strings.ReplaceAll(plainRecallHeadline(outline), " / ", " > ")
+}
 
 func plainRecallHeadline(headline string) string {
 	cleaned := strings.TrimSpace(headline)

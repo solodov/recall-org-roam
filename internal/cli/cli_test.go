@@ -187,7 +187,7 @@ func TestRunRejectsDirectSearchCommand(t *testing.T) {
 func TestRunServesRecallProviderWithTextprotoIO(t *testing.T) {
 	t.Helper()
 
-	service := &fakeService{searchResponse: app.SearchResponse{Results: []app.SearchResult{{ID: "alpha-id", Path: "projects/model.org", FilePath: "/notes/projects/model.org", Headline: "Find [[https://example.invalid][Alpha]]"}}}}
+	service := &fakeService{searchResponse: app.SearchResponse{Results: []app.SearchResult{{ID: "alpha-id", ParentID: "parent-id", AncestorIDs: []string{"root-id", "parent-id"}, Path: "projects/model.org", FilePath: "/notes/projects/model.org", Headline: "Find [[https://example.invalid][Alpha]]", Outline: "Projects / Find [[https://example.invalid][Alpha]]"}}}}
 	requestBytes := mustMarshalTextproto(t, &searchv1.SearchRequest{Query: "alpha", Limit: proto.Uint32(1), SelectorHints: []string{"entry"}})
 	var stdout strings.Builder
 	var stderr strings.Builder
@@ -228,17 +228,18 @@ func TestRunServesRecallProviderWithTextprotoIO(t *testing.T) {
 	if got, want := result.GetSelector(), "entry:content"; got != want {
 		t.Fatalf("selector = %q, want %q", got, want)
 	}
-	if got, want := resultTextField(t, result, "title"), "Find Alpha"; got != want {
-		t.Fatalf("title field = %q, want %q", got, want)
+	if got, want := resultTextField(t, result, "outline"), "Projects > Find Alpha"; got != want {
+		t.Fatalf("outline field = %q, want %q", got, want)
 	}
-	if got, want := resultTextField(t, result, "path"), "projects/model.org"; got != want {
-		t.Fatalf("path field = %q, want %q", got, want)
-	}
-	if got, want := strings.Join(result.GetFormat().GetTitleFields(), ","), "title"; got != want {
+	assertNoTextField(t, result, "title")
+	assertNoTextField(t, result, "path")
+	assertHiddenTextField(t, result, "parent_id", "parent-id")
+	assertHiddenTextField(t, result, "ancestor_ids", "root-id parent-id")
+	if got, want := strings.Join(result.GetFormat().GetTitleFields(), ","), "outline"; got != want {
 		t.Fatalf("title fields = %q, want %q", got, want)
 	}
-	if got, want := strings.Join(result.GetFormat().GetDetailFields(), ","), "path,outline"; got != want {
-		t.Fatalf("detail fields = %q, want %q", got, want)
+	if got := result.GetFormat().GetDetailFields(); len(got) != 0 {
+		t.Fatalf("detail fields = %q, want none", strings.Join(got, ","))
 	}
 	if len(result.GetTargets()) != 2 {
 		t.Fatalf("targets = %+v, want org-roam URI and file", result.GetTargets())
@@ -351,8 +352,8 @@ func TestRunServesRecallProviderWithBinaryIO(t *testing.T) {
 	if got, want := response.GetResults()[0].GetSelector(), "entry:content"; got != want {
 		t.Fatalf("selector = %q, want %q", got, want)
 	}
-	if got, want := resultTextField(t, response.GetResults()[0], "title"), "Alpha"; got != want {
-		t.Fatalf("title field = %q, want %q", got, want)
+	if got, want := resultTextField(t, response.GetResults()[0], "outline"), "Alpha"; got != want {
+		t.Fatalf("outline field = %q, want %q", got, want)
 	}
 }
 
@@ -479,13 +480,38 @@ func TestRunRendersErrorsAsJSONWithFlag(t *testing.T) {
 
 func resultTextField(t *testing.T, result *searchv1.SearchResponse_Result, key string) string {
 	t.Helper()
+	return resultField(t, result, key).GetText()
+}
+
+func resultField(t *testing.T, result *searchv1.SearchResponse_Result, key string) *searchv1.SearchResponse_Result_Field {
+	t.Helper()
 	for _, field := range result.GetFields() {
 		if field.GetKey() == key {
-			return field.GetText()
+			return field
 		}
 	}
 	t.Fatalf("result fields = %+v, want text field %q", result.GetFields(), key)
-	return ""
+	return nil
+}
+
+func assertHiddenTextField(t *testing.T, result *searchv1.SearchResponse_Result, key string, value string) {
+	t.Helper()
+	field := resultField(t, result, key)
+	if got := field.GetText(); got != value {
+		t.Fatalf("%s field = %q, want %q", key, got, value)
+	}
+	if !field.GetHidden() {
+		t.Fatalf("%s hidden = false, want true", key)
+	}
+}
+
+func assertNoTextField(t *testing.T, result *searchv1.SearchResponse_Result, key string) {
+	t.Helper()
+	for _, field := range result.GetFields() {
+		if field.GetKey() == key {
+			t.Fatalf("result fields = %+v, want no text field %q", result.GetFields(), key)
+		}
+	}
 }
 
 func mustMarshalTextproto(t *testing.T, message proto.Message) []byte {

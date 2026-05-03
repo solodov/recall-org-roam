@@ -20,9 +20,14 @@
 ;;    `recall-org-roam-config-file` to the config file you want Emacs to use.
 ;; 3. Load this file and enable `recall-org-roam-mode`.
 ;;
-;; Minimal setup:
+;; Minimal setup with Emacs 29+ package-vc:
 ;;
-;;   (add-to-list 'load-path "/path/to/recall-org-roam/emacs")
+;;   (require 'package-vc)
+;;   (unless (package-installed-p 'recall-org-roam)
+;;     (package-vc-install
+;;      '(recall-org-roam
+;;        :url "https://github.com/solodov/recall-org-roam.git"
+;;        :lisp-dir "emacs")))
 ;;   (require 'recall-org-roam)
 ;;   (recall-org-roam-mode 1)
 ;;
