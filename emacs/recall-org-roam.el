@@ -176,14 +176,14 @@ With SILENT-SUCCESS non-nil, suppress the success minibuffer message."
     'queued))
 
 (defun recall-org-roam--drain-pending-update (path)
-  (when-let ((pending-request (gethash path recall-org-roam--pending-update-requests)))
+  (when-let* ((pending-request (gethash path recall-org-roam--pending-update-requests)))
     (remhash path recall-org-roam--pending-update-requests)
     (recall-org-roam--start-update-process
      path
      (plist-get pending-request :silent-success))))
 
 (defun recall-org-roam--start-update-process (path silent-success)
-  (when-let ((process (recall-org-roam--start-command "update-file" (list path) silent-success)))
+  (when-let* ((process (recall-org-roam--start-command "update-file" (list path) silent-success)))
     (process-put process 'recall-org-roam-file-path path)
     (puthash path process recall-org-roam--inflight-update-processes)
     process))
@@ -248,7 +248,7 @@ With SILENT-SUCCESS non-nil, suppress the success minibuffer message."
           (when (eq (gethash path recall-org-roam--inflight-update-processes) process)
             (remhash path recall-org-roam--inflight-update-processes))
           (recall-org-roam--drain-pending-update path))
-        (when-let ((buffer (process-buffer process)))
+        (when-let* ((buffer (process-buffer process)))
           (when (buffer-live-p buffer)
             (kill-buffer buffer)))))))
 
@@ -314,7 +314,7 @@ With SILENT-SUCCESS non-nil, suppress the success minibuffer message."
   (let* ((subcommand (process-get process 'recall-org-roam-subcommand))
          (args (process-get process 'recall-org-roam-args))
          (command-line (recall-org-roam--command-line args)))
-    (if-let ((duplicates (recall-org-roam--json-get payload "duplicates")))
+    (if-let* ((duplicates (recall-org-roam--json-get payload "duplicates")))
         (recall-org-roam--append-diagnostic-entry
          (format "%s: duplicate Org IDs" subcommand)
          command-line
@@ -408,7 +408,7 @@ With SILENT-SUCCESS non-nil, suppress the success minibuffer message."
        (gethash key object)))
 
 (defun recall-org-roam--process-output (process)
-  (if-let ((buffer (process-buffer process)))
+  (if-let* ((buffer (process-buffer process)))
       (with-current-buffer buffer
         (buffer-substring-no-properties (point-min) (point-max)))
     ""))
